@@ -1,0 +1,28 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "module description"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "description"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "NERtcDemo"
+    },
+    {
+      "name": "Enter_Room",
+      "value": "正在加入房间"
+    },
+    {
+      "name": "audio_encode_property",
+      "value": "音频编码属性"
+    },
+    {
+      "name": "audio_scenario",
+      "value": "音频场景"
+    }
+  ]
+}

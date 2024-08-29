@@ -1,0 +1,20 @@
+{
+  "string": [
+    {
+      "name": "app_name",
+      "value": "nertc"
+    },
+    {
+      "name": "camera_auth_reason",
+      "value": "need to use camera"
+    },
+    {
+      "name": "microphone_auth_reason",
+      "value": "need to use microphone"
+    },
+    {
+      "name": "screen_share_auth_reason",
+      "value": "need to use screen share"
+    }
+  ]
+}

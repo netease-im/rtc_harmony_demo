@@ -1,0 +1,9 @@
+{
+  "src": [
+    "pages/Settings",
+    "pages/Home",
+    "pages/Chat",
+    "pages/Call",
+    "pages/Preview"
+  ]
+}

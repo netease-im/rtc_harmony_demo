@@ -1,0 +1,15 @@
+{
+  "license": "",
+  "devDependencies": {},
+  "author": "",
+  "name": "demo",
+  "description": "Please describe the basic information.",
+  "main": "",
+  "version": "1.0.0",
+  "dependencies": {
+    //集成线下包
+    "sdk": "file:libs/nertc_sdk.har",
+    //openharmony仓库集成
+    //"@nertc/nertc_sdk": "1.2.1-beta"
+  }
+}

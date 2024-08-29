@@ -1,0 +1,41 @@
+{
+  "apiType": 'stageMode',
+  "buildOption": {
+    "sourceOption": {
+      "workers": [
+        "./src/main/ets/pages/chat/Worker.ets"
+      ]
+    },
+  },
+  "targets": [
+    {
+      "name": "default",
+      "runtimeOS": "HarmonyOS",
+      "config": {
+        "buildOption": {
+          "arkOptions": {
+            "buildProfileFields": {
+              "productType": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "auto",
+      "runtimeOS": "HarmonyOS",
+      "config": {
+        "buildOption": {
+          "arkOptions": {
+            "buildProfileFields": {
+              "productType": 1
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "ohosTest",
+    }
+  ]
+}
