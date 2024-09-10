@@ -1,4 +1,4 @@
-import { NERtcConstants, NERtcSDK, NERtcCallback} from 'sdk/Index';
+import { NERtcConstants, NERtcSDK, NERtcCallbackEx} from 'sdk/Index';
 import { NERtcPacketObserver} from 'sdk/src/main/ets/default/sdk/NERtcCallback';
 import Config from '../../common/Config';
 import DemoUser from '../../model/DemoUser';
@@ -8,8 +8,7 @@ import ExternalOpusSource from '../../external/ExternalOpusSource';
 import { Product } from '../../model/common'
 import PushExternalH264Video from '../../external/ExternalH264Source1';
 import fs from '@ohos.file.fs';
-import { RtcDemoLogic, IRtcDemoLogicDelegate } from '../../common/RtcDemoLogic';
-import { RtcDemoCallback, RtcDemoAudioFrameObserver, RtcDemoVideoFrameObserver } from '../../common/RtcDemoCallback';
+import { RtcDemoAudioFrameObserver, RtcDemoVideoFrameObserver } from '../../common/RtcDemoCallback';
 import { preferences } from '@kit.ArkData';
 import Prompt from '@system.prompt';
 import image from '@ohos.multimedia.image'
@@ -34,7 +33,7 @@ export let gVideoModel: VideoModel
 export let gOtherModel: OtherModel
 export let gDumpModel: DumpModel
 
-export default class ChatPresenter {
+export default class ChatPresenter extends NERtcCallbackEx {
 
   private static instance: ChatPresenter = new ChatPresenter()
   private audioEncodedSource?: ExternalOpusSource
@@ -63,124 +62,132 @@ export default class ChatPresenter {
   private videoFrameObserver: RtcDemoVideoFrameObserver = new RtcDemoVideoFrameObserver(TAG);
   private isVideoFrameObserverEnabled: boolean = false;
 
-  demoLogicDelegate: IRtcDemoLogicDelegate = {
+  onJoinChannel(result: number, channelId: bigint, elapsed: bigint, uid: bigint): void {
+    state_ = result == NERtcConstants.ErrorCode.NO_ERROR ? ChatState.CHAT_ED : ChatState.CHAT_IDLE;
+    if (state_ == ChatState.CHAT_ED) {
+      delegates_?.forEach(delegate_ => {
+        if (!this.localUser) {
+          this.localUser = new DemoUser(uid, true);
+        }
+        delegate_?.update(OPERATOR.ADD, this.localUser);
+      });
+      setTimeout(() => {
+        if (gAudioModel) {
+          let ret = NERtcSDK.getInstance().enableLocalAudio(gAudioModel.autoOpenAudio);
+          console.info(TAG, 'EnableLocalAudio: ' + ret);
+        }
+        if (gVideoModel) {
+          this.enableVideo(gVideoModel.autoEnableVideo);
+        }
+        this.enableSpeakerOn(true);
+      });
+    } else {
+      delegates_?.forEach(delegate_ => {
+        delegate_?.error('Join channel failed, result:' + result);
+      });
+    }
+  }
 
-    onJoinChannel: (result: number, channelId: bigint, elapsed: bigint, uid: bigint): void => {
-      state_ = result == NERtcConstants.ErrorCode.NO_ERROR ? ChatState.CHAT_ED : ChatState.CHAT_IDLE;
-      if (state_ == ChatState.CHAT_ED) {
-        delegates_?.forEach(delegate_ => {
-          if (!this.localUser) {
-            this.localUser = new DemoUser(uid, true);
-          }
-          delegate_?.update(OPERATOR.ADD, this.localUser);
-        });
-        setTimeout(() => {
-          if (gAudioModel) {
-            let ret = NERtcSDK.getInstance().enableLocalAudio(gAudioModel.autoOpenAudio);
-            console.info(TAG, 'EnableLocalAudio: ' + ret);
-          }
-          if (gVideoModel) {
-            this.enableVideo(gVideoModel.autoEnableVideo);
-          }
-          this.enableSpeakerOn(true);
-        });
-      } else {
-        delegates_?.forEach(delegate_ => {
-          delegate_?.error('Join channel failed, result:' + result);
+  onLeaveChannel(result: number): void {
+    state_ = ChatState.CHAT_IDLE;
+    delegates_.forEach(delegate_ => {
+      if (this.localUser) {
+        delegate_?.update(OPERATOR.DEL, this.localUser);
+      }
+    });
+  }
+
+  onUserJoined(uid: bigint, extraInfo?: NERtcConstants.NERtcUserJoinExtraInfo | undefined): void {
+    delegates_?.forEach(delegate_ => {
+      let user = new DemoUser(uid);
+      delegate_?.update(OPERATOR.ADD, user);
+    });
+  }
+
+  onUserLeave(uid: bigint, reason: number, extraInfo?: NERtcConstants.NERtcUserLeaveExtraInfo | undefined): void {
+    delegates_?.forEach(delegate_ => {
+      let user = new DemoUser(uid);
+      delegate_?.update(OPERATOR.DEL, user);
+    });
+  }
+
+  onUserAudioStart(uid: bigint): void {}
+
+  onUserAudioStop(uid: bigint): void {}
+
+  onUserVideoStart(uid: bigint, maxProfile: NERtcConstants.NERtcVideoProfileType): void {}
+
+  onUserVideoStop(uid: bigint): void {}
+
+  onDisconnect(reason: number): void {}
+
+  onClientRoleChange(oldRole: number, newRole: number): void {}
+
+  onRecvSEIMsg(userId: bigint, data: Uint8Array, dataSize: number): void {}
+
+  onFirstAudioFrameDecoded(uid: bigint): void {
+    Prompt.showToast({
+      message: `onFirstAudioFrameDecoded, uid:${uid}`
+    });
+  }
+
+  onFirstVideoFrameDecoded(streamType: NERtcConstants.NERtcVideoStreamType, userId: bigint, width: number, height: number): void {
+    Prompt.showToast({
+      message: `onFirstVideoFrameDecoded, streamType:${streamType}, uid:${userId}, width:${width}, height:${height}`
+    });
+  }
+
+  onUserSubStreamVideoStart(uid: bigint, maxProfile: NERtcConstants.NERtcVideoProfileType): void {
+    delegates_?.forEach(delegate_ => {
+      let canvasId = DemoUser.GeneratorSubCanvasId(uid);
+      let obj: Map<string, Object | undefined> = new Map;
+      obj.set('uid', uid);
+      obj.set('xComponentIdSub', canvasId);
+      delegate_?.update(OPERATOR.UPD, obj);
+    });
+  }
+
+  onUserSubStreamVideoStop(uid: bigint): void {
+    delegates_?.forEach(delegate_ => {
+      let obj: DemoLogicMap = new Map;
+      obj.set('uid', uid);
+      obj.set('xComponentIdSub', undefined);
+      delegate_?.update(OPERATOR.UPD, obj);
+    });
+  }
+
+  onLocalAudioVolumeIndication(volume: number, vadFlag: boolean): void {
+    delegates_?.forEach(delegate_ => {
+      if (delegate_.localVolume) {
+        delegate_.localVolume({
+          volume: volume, vad: vadFlag
         });
       }
-    },
-    onLeaveChannel: (result: number): void => {
-      state_ = ChatState.CHAT_IDLE;
-      delegates_.forEach(delegate_ => {
-        if (this.localUser) {
-          delegate_?.update(OPERATOR.DEL, this.localUser);
-        }
-      });
-    },
-    onUserJoined: (uid: bigint, extraInfo?: string | undefined): void => {
-      delegates_?.forEach(delegate_ => {
-        let user = new DemoUser(uid);
-        delegate_?.update(OPERATOR.ADD, user);
-      });
-    },
-    onUserLeave: (uid: bigint, reason: number, extraInfo?: string | undefined): void => {
-      delegates_?.forEach(delegate_ => {
-        let user = new DemoUser(uid);
-        delegate_?.update(OPERATOR.DEL, user);
-      });
-    },
-    onUserVideoStart: (uid: bigint, maxProfile: number): void => {
-    },
-    onUserVideoStop: (uid: bigint): void => {
-    },
-    onAudioMixingTimestampUpdate: (timestampMs: bigint): void => {
-    },
-    onAudioEffectTimestampUpdate: (id: number, timestampMs: bigint): void => {
-    },
-    onApiCallExecuted: (apiName: string, result: number, message: string): void => {
-    },
-    onFirstAudioFrameDecoded: (uid: bigint): void => {
-      Prompt.showToast({
-        message: `uid: ${uid} onFirstAudioFrameDecoded`
-      });
-    },
-    onFirstVideoFrameDecoded: (streamType: NERtcConstants.NERtcVideoStreamType, userId: bigint, width: number,
-      height: number): void => {
-      Prompt.showToast({
-        message: `streamType: ${streamType}, uid: ${userId}, width:${width}, height: ${height}`
-      });
-    },
-    onUserSubStreamVideoStart: (uid: bigint, maxProfile: NERtcConstants.NERtcVideoProfileType): void => {
-      delegates_?.forEach(delegate_ => {
-        let canvasId = DemoUser.GeneratorSubCanvasId(uid);
-        let obj: Map<string, Object | undefined> = new Map;
-        obj.set('uid', uid);
-        obj.set('xComponentIdSub', canvasId);
-        delegate_?.update(OPERATOR.UPD, obj);
-      });
-    },
-    onUserSubStreamVideoStop: (uid: bigint): void => {
-      delegates_?.forEach(delegate_ => {
-        let obj: DemoLogicMap = new Map;
-        obj.set('uid', uid);
-        obj.set('xComponentIdSub', undefined);
-        delegate_?.update(OPERATOR.UPD, obj);
-      });
-    },
-    onLocalAudioVolumeIndication: (volume: number, vadFlag: boolean): void => {
-      delegates_?.forEach(delegate_ => {
-        if (delegate_.localVolume) {
-          delegate_.localVolume({
-            volume: volume, vad: vadFlag
-          });
-        }
-      });
-    },
-    onRemoteAudioVolumeIndication: (volumeArray: NERtcConstants.NERtcAudioVolumeInfo[], totalVolume: number): void => {
-      delegates_?.forEach(delegate_ => {
-        if (delegate_.remoteVolume) {
-          delegate_.remoteVolume(volumeArray, totalVolume);
-        }
-      });
-    },
+    });
+  }
 
-    onLastMileProbeResult: (result: NERtcConstants.NERtcProbeResult): void => {
-      delegates_?.forEach(delegate_ => {
-        if(delegate_.networkQuality) {
-          delegate_.networkQuality(null, result)
-        }
-      })
-    },
+  onRemoteAudioVolumeIndication(volumeInfo: NERtcConstants.NERtcAudioVolumeInfo[], totalVolume: number): void {
+    delegates_?.forEach(delegate_ => {
+      if (delegate_.remoteVolume) {
+        delegate_.remoteVolume(volumeInfo, totalVolume);
+      }
+    });
+  }
 
-    onLastMileQuality: (quality: number): void => {
-      delegates_?.forEach(delegate_ => {
-        if(delegate_.networkQuality) {
-          delegate_.networkQuality(quality, null)
-        }
-      })
-    }
+  onLastmileProbeResult(result: NERtcConstants.NERtcProbeResult): void {
+    delegates_?.forEach(delegate_ => {
+      if(delegate_.networkQuality) {
+        delegate_.networkQuality(null, result)
+      }
+    })
+  }
 
+  onLastmileQuality(quality: number): void {
+    delegates_?.forEach(delegate_ => {
+      if(delegate_.networkQuality) {
+        delegate_.networkQuality(quality, null)
+      }
+    })
   }
 
   static getInstance(): ChatPresenter {
@@ -288,11 +295,10 @@ export default class ChatPresenter {
 
   init(context: Context) {
     this.loadModel(context)
-    RtcDemoLogic.sharedInstance().addDelegate(this.demoLogicDelegate);
 
     this.before()
     let option: NERtcConstants.NERtcOption = { logLevel: NERtcConstants.LogLevel.INFO }
-    NERtcSDK.getInstance().init(context, Config.APP_KEY_DEBUG, new RtcDemoCallback(TAG), option)
+    NERtcSDK.getInstance().init(context, Config.APP_KEY_DEBUG, this, option)
     this.after()
   }
 
@@ -321,7 +327,6 @@ export default class ChatPresenter {
 
   private before = (): void => {
     let param: object = new Object();
-    param["sdk.enable.debug.environment"] = true;
     param["sdk.enable.encrypt.log"] = false;
     if(gAudioModel) {
       param[NERtcConstants.NERtcParameterKey.kNERtcKeyAutoSubscribeAudio] = gAudioModel.autoSubAudio
@@ -1564,7 +1569,6 @@ export default class ChatPresenter {
 
   release() {
     NERtcSDK.getInstance().setStatsObserver(null)
-    RtcDemoLogic.sharedInstance().removeDelegate(this.demoLogicDelegate);
     NERtcSDK.getInstance().release()
     console.info(TAG, 'Call release done.')
     this.localUser = null
