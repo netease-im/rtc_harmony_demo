@@ -21,7 +21,7 @@ import { ExternalPcmSource } from '../../external/ExternalPcmSource';
 import { ExternalYuvVideoSource } from '../../external/ExternalYuvVideoSource';
 import { DemoNERtcPackageObserver } from './PackageObserver';
 import { DemoNERtcPreDecodeObserver } from './PreDecodeObserver';
-import { VideoModel, OtherModel, AudioModel, DumpModel } from '../settings/model/common';
+import { VideoModel, OtherModel, AudioModel, DumpModel, AudioEffectModel } from '../settings/model/common';
 
 let state_: ChatState = ChatState.CHAT_IDLE
 let TAG: string = 'MultiChat'
@@ -32,6 +32,7 @@ export let gAudioModel: AudioModel
 export let gVideoModel: VideoModel
 export let gOtherModel: OtherModel
 export let gDumpModel: DumpModel
+export let gAudioEffectModel: AudioEffectModel
 
 export default class ChatPresenter extends NERtcCallbackEx {
 
@@ -310,31 +311,48 @@ export default class ChatPresenter extends NERtcCallbackEx {
     let localVideoData = data.getSync('videoData', '') as string
     let localOtherData = data.getSync('otherData', '') as string
     let localDumpData = data.getSync('dumpData', '') as string
+    let localAudioEffectData = data.getSync('audioEffectData', '') as string
 
     try {
       gAudioModel = JSON.parse(localAudioData)
       gVideoModel = JSON.parse(localVideoData)
       gOtherModel = JSON.parse(localOtherData)
       gDumpModel = JSON.parse(localDumpData)
+      gAudioEffectModel = JSON.parse(localAudioEffectData)
     } catch (e) {
       console.info(TAG, JSON.stringify(e))
       gAudioModel = new AudioModel()
       gVideoModel = new VideoModel()
       gOtherModel = new OtherModel()
       gDumpModel = new DumpModel()
+      gAudioEffectModel = new AudioEffectModel()
     }
   }
 
   private before = (): void => {
     let param: object = new Object();
+    //云信内部使用字段，开发者不要使用。可申请两个appkey，一个作为生产环境，一个作为正式环境。
+    param["sdk.enable.debug.environment"] = true;
+    //设置SDK日志是否加密，调试阶段打开，上线阶段关闭
     param["sdk.enable.encrypt.log"] = false;
     if(gAudioModel) {
       param[NERtcConstants.NERtcParameterKey.kNERtcKeyAutoSubscribeAudio] = gAudioModel.autoSubAudio
     }
     if(gVideoModel) {
       param[NERtcConstants.NERtcParameterKey.kNERtcKeyStartVideoWithBackCamera] = !gVideoModel.fontCamera
-      param[NERtcConstants.NERtcParameterKey.kNERtcKeyVideoEncodeMode] = gVideoModel.encodeMode
-      param[NERtcConstants.NERtcParameterKey.kNERtcKeyVideoDecodeMode] = gVideoModel.decodeMode
+
+      if(gVideoModel.encodeMode == 0 || gVideoModel.encodeMode == 1) {
+        param[NERtcConstants.NERtcParameterKey.kNERtcKeyVideoEncodeMode] = 0
+      } else {
+        param[NERtcConstants.NERtcParameterKey.kNERtcKeyVideoEncodeMode] = 1
+      }
+
+      if(gVideoModel.decodeMode == 0 || gVideoModel.decodeMode == 1) {
+        param[NERtcConstants.NERtcParameterKey.kNERtcKeyVideoDecodeMode] = 0
+      } else {
+        param[NERtcConstants.NERtcParameterKey.kNERtcKeyVideoDecodeMode] = 1
+      }
+
       param[NERtcConstants.NERtcParameterKey.kNERtcKeyVideoSendMode] = gVideoModel.publishStreamType
       param[NERtcConstants.NERtcParameterKey.kNERtcKeyAutoSubscribeVideo] = gVideoModel.autoSubVideo
     }
@@ -449,6 +467,14 @@ export default class ChatPresenter extends NERtcCallbackEx {
 
         NERtcSDK.getInstance().setParameters(param)
       }
+
+      // other settings.
+      if(gOtherModel) {
+        let channelProfile = gOtherModel.channelProfile
+        let ret = NERtcSDK.getInstance().setChannelProfile(channelProfile)
+        console.info(TAG, `setChannelProfile: ${ret}`)
+      }
+
     // }, 1000)
   }
 
@@ -456,6 +482,48 @@ export default class ChatPresenter extends NERtcCallbackEx {
     if(gAudioModel) {
       //实时音量回调
       this.realTimeVolumeEnable(gAudioModel.captureVolumeEnable)
+    }
+
+    this.enableVoiceEffectIfNeeded()
+  }
+
+  private enableVoiceEffectIfNeeded() : void {
+    if (gAudioEffectModel) {
+      if (gAudioEffectModel.voiceChangerEffectsEnable) {
+        NERtcSDK.getInstance().setAudioEffectPreset(gAudioEffectModel.voiceChangerEffectsType)
+      }
+
+      if (gAudioEffectModel.voiceBeautifierEffectsEnable) {
+        NERtcSDK.getInstance().setVoiceBeautifierPreset(gAudioEffectModel.voiceBeautifierEffectsType)
+      }
+
+      if (gAudioEffectModel.voicePitchEnable) {
+        NERtcSDK.getInstance().setLocalVoicePitch(gAudioEffectModel.voicePitch)
+      }
+
+      if (gAudioEffectModel.voiceReverbEnable) {
+        let param: NERtcConstants.NERtcReverbParam = new NERtcConstants.NERtcReverbParam
+        param.wetGain = gAudioEffectModel.wetGain
+        param.dryGain = gAudioEffectModel.dryGain
+        param.damping = gAudioEffectModel.damping
+        param.roomSize = gAudioEffectModel.roomSize
+        param.decayTime = gAudioEffectModel.decayTime
+        param.preDelay = gAudioEffectModel.preDelay
+        NERtcSDK.getInstance().setLocalVoiceReverbParam(param)
+      }
+
+      if (gAudioEffectModel.voiceEqualizationEnable) {
+        NERtcSDK.getInstance().setLocalVoiceEqualization(0, gAudioEffectModel.band31)
+        NERtcSDK.getInstance().setLocalVoiceEqualization(1, gAudioEffectModel.band62)
+        NERtcSDK.getInstance().setLocalVoiceEqualization(2, gAudioEffectModel.band125)
+        NERtcSDK.getInstance().setLocalVoiceEqualization(3, gAudioEffectModel.band250)
+        NERtcSDK.getInstance().setLocalVoiceEqualization(4, gAudioEffectModel.band500)
+        NERtcSDK.getInstance().setLocalVoiceEqualization(5, gAudioEffectModel.band1K)
+        NERtcSDK.getInstance().setLocalVoiceEqualization(6, gAudioEffectModel.band2K)
+        NERtcSDK.getInstance().setLocalVoiceEqualization(7, gAudioEffectModel.band4K)
+        NERtcSDK.getInstance().setLocalVoiceEqualization(8, gAudioEffectModel.band8K)
+        NERtcSDK.getInstance().setLocalVoiceEqualization(9, gAudioEffectModel.band16K)
+      }
     }
   }
 
@@ -586,9 +654,12 @@ export default class ChatPresenter extends NERtcCallbackEx {
       }
 
       if(gOtherModel) {
+        /***
+         * ################ setLocalPublishFallbackOption  ################
+         * DISABLE: 上行网络较弱时，不对音视频流作回退处理，但不能保证音视频流的质量。
+         * AUDIO_ONLY: 上行网络较弱时，只发布音频流。
+         */
         let upFallbackOption = gOtherModel.upFallbackOption
-        let downFallbackOption = gOtherModel.downFallbackOption
-
         let streamOption = NERtcConstants.StreamFallbackOption.DISABLED
         if(upFallbackOption == 1) {
           streamOption = NERtcConstants.StreamFallbackOption.AUDIO_ONLY
@@ -596,7 +667,12 @@ export default class ChatPresenter extends NERtcCallbackEx {
         let ret = NERtcSDK.getInstance().setLocalPublishFallbackOption(streamOption)
         console.info(TAG, `setLocalPublishFallbackOption ret:${ret}`)
 
-
+        /***
+         * ################ setRemoteSubscribeFallbackOption  ################
+         * VIDEO_STREAM_LOW: 在下行网络条件较差的情况下，SDK 将只接收视频小流，即低分辨率、低码率视频流。
+         * AUDIO_ONLY: 下行网络较弱时，先尝试只接收视频小流，即低分辨率、低码率视频流。如果网络环境无法显示视频，则再回退到只接收音频流。
+         */
+        let downFallbackOption = gOtherModel.downFallbackOption
         if(downFallbackOption == 0) {
           streamOption = NERtcConstants.StreamFallbackOption.VIDEO_STREAM_LOW
         } else if(downFallbackOption == 1) {
@@ -620,6 +696,7 @@ export default class ChatPresenter extends NERtcCallbackEx {
       state_ = (ret == NERtcConstants.ErrorCode.NO_ERROR) ? ChatState.CHAT_ING : ChatState.CHAT_IDLE
       console.info(TAG, "=== Invoke join End. ===")
       this.enableBackgroundRunning(true);
+      this.enableVoiceEffectIfNeeded();
     } else {
       console.error(TAG, 'LoginInfo is empty.')
     }
@@ -1015,6 +1092,13 @@ export default class ChatPresenter extends NERtcCallbackEx {
     }
   }
 
+  setAudioMixingPitch() {
+    let ret = NERtcSDK.getInstance().setAudioMixingPitch(gAudioModel.audioMixPitch)
+    if(ret != NERtcConstants.ErrorCode.NO_ERROR) {
+      Prompt.showToast({ message: `设置伴音音调失败':${ret}`})
+    }
+  }
+
   enableAudioEffect(enabled: boolean) {
 
     if(!gAudioModel.audioEffect1Url) {
@@ -1038,6 +1122,13 @@ export default class ChatPresenter extends NERtcCallbackEx {
     } else {
       let ret = NERtcSDK.getInstance().stopEffect(1)
       console.info(TAG, `stopEffect id:1, ret:${ret}`)
+    }
+  }
+
+  setAudioEffectPitch() {
+    let ret = NERtcSDK.getInstance().setEffectPitch(1, gAudioModel.audioEffect1Pitch)
+    if(ret != NERtcConstants.ErrorCode.NO_ERROR) {
+      Prompt.showToast({ message: `设置音调音调失败':${ret}`})
     }
   }
 
@@ -1539,16 +1630,19 @@ export default class ChatPresenter extends NERtcCallbackEx {
    * @param blackList
    * @param whiteList
    */
-  setBlackWhiteList(blackList: BigUint64Array|null, whiteList: BigUint64Array|null) {
+  setBlackWhiteList(blackList: BigUint64Array|null, pubWhiteList: BigUint64Array|null, subWhiteList: BigUint64Array|null) {
     let setBlackListRet = NERtcSDK.getInstance().setSubscribeAudioBlacklist(blackList, NERtcConstants.NERtcAudioStreamType.kNERtcAudioStreamTypeMain)
-    let setWhiteListRet = NERtcSDK.getInstance().setSubscribeAudioWhitelist(whiteList)
+    let setPubWhiteListRet = NERtcSDK.getInstance().setSubscribeAudioWhitelist(pubWhiteList)
+    let setSubWhiteListRet = NERtcSDK.getInstance().setAudioSubscribeOnlyBy(subWhiteList)
     Prompt.showToast({ message:
     `设置黑名单列表:${ blackList ? [...blackList] : 'null'}, 设置结果:${setBlackListRet} \n
-     设置白名单列表:${ whiteList ? [...whiteList] : 'null'}, 设置结果:${setWhiteListRet}`})
+     设置上行白名单列表:${ pubWhiteList ? [...pubWhiteList] : 'null'}, 设置结果:${setPubWhiteListRet} \n
+     设置下行白名单列表:${ subWhiteList ? [...subWhiteList] : 'null'}, 设置结果:${setSubWhiteListRet}`})
   }
 
-  enableLastMileProbe(enabled: boolean) {
+  enableLastMileProbe(enabled: boolean): number {
 
+    let ret = NERtcConstants.ErrorCode.NO_ERROR
     if(enabled) {
       let upBitRate = gOtherModel.upLinkBitRate
       let downBitRate = gOtherModel.downLinkBitRate
@@ -1561,10 +1655,15 @@ export default class ChatPresenter extends NERtcCallbackEx {
         expectedUplinkBitrate: BigInt(upBitRate),
         expectedDownlinkBitrate: BigInt(downBitRate)
       }
-      NERtcSDK.getInstance().startLastmileProbeTest(config)
+      ret = NERtcSDK.getInstance().startLastmileProbeTest(config)
+      if(ret != NERtcConstants.ErrorCode.NO_ERROR) {
+        Prompt.showToast({ message: `开启测速失败:${ret}, 请检查 设置-其他-网络测速 是否开启`})
+      }
     } else {
-      NERtcSDK.getInstance().stopLastmileProbeTest()
+      ret = NERtcSDK.getInstance().stopLastmileProbeTest()
+      Prompt.showToast({ message: `停止测速:${ret}`})
     }
+    return ret
   }
 
   release() {

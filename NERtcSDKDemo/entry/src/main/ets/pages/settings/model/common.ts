@@ -20,12 +20,14 @@ export class AudioModel {
   audioMixIsPlay: boolean = true //伴音本地是否播放
   audioMixLoopNum: number = 1 //伴音循环次数
   audioMixMainSend: boolean = true //伴音是否跟随主流发送
+  audioMixPitch: number = 0 //音调默认值为0, 取值范围[-12,12]
 
   //音效1
   audioEffect1Url: string = ''  //音效文件路径
   audioEffect1IsSend: boolean = true  //是否发送
   audioEffect1IsPlay: boolean = true  //是否播放
   audioEffect1LoopNum: number = 1     //循环次数
+  audioEffect1Pitch: number = 0 //音调默认值为0, 取值范围[-12,12]
 
   //外部音频输入
   externalAudioInputUrl: string = '' //外部音频输入路径
@@ -111,6 +113,7 @@ export class OtherModel {
   chatDetail: boolean = true
   upFallbackOption: number = 0
   downFallbackOption: number = 0
+  channelProfile: number = 0
 
   //网络测速
   upLinkBitRate: number = 5000000 //本端期望的最高发送码率
@@ -144,6 +147,43 @@ export class DumpModel {
   enableDumpPostProcessedYUV: number = 0;
   maxSpaceForDumpPostProcessedYUVMB: number = 3; // 2GB
   dumpPostProcessedYUVInterval: number = 0; // ms
+}
+
+export class AudioEffectModel {
+
+  //变声预设值
+  voiceChangerEffectsEnable: boolean = false
+  voiceChangerEffectsType: number = 0
+
+  //预设的美声效果
+  voiceBeautifierEffectsEnable: boolean = false
+  voiceBeautifierEffectsType: number = 0
+
+  //音调
+  voicePitchEnable: boolean = false
+  voicePitch: number = 1.0
+
+  //设置本地语音混响效果
+  voiceReverbEnable: boolean = false
+  wetGain: number = 0.0
+  dryGain: number = 1.0
+  damping: number = 1.0
+  roomSize: number = 0.1
+  decayTime: number = 0.1
+  preDelay: number = 0.0
+
+  //设置本地语音音效均衡，即自定义设置本地人声均衡波段的中心频率。
+  voiceEqualizationEnable: boolean = false
+  band31: number = 0.0
+  band62: number = 0.0
+  band125: number = 0.0
+  band250: number = 0.0
+  band500: number = 0.0
+  band1K: number = 0.0
+  band2K: number = 0.0
+  band4K: number = 0.0
+  band8K: number = 0.0
+  band16K: number = 0.0
 }
 
 export enum FUNC {
@@ -192,6 +232,9 @@ function __take_parcel__() {
 
     let dumpData: OtherModel = JSON.parse(this.data.getSync('dumpData', '') as string)
     writeToParcel(dumpData, this.dumpModel)
+
+    let audioEffectData: OtherModel = JSON.parse(this.data.getSync('audioEffectData', '') as string)
+    writeToParcel(audioEffectData, this.audioEffectModel)
   } catch (e) {
     console.info(this.TAG, JSON.stringify(e))
   }
@@ -203,11 +246,13 @@ function __put_parcel__(success?: Function) {
   let videoData = JSON.stringify(this.videoModel)
   let otherData = JSON.stringify(this.otherModel)
   let dumpData = JSON.stringify(this.dumpModel)
+  let audioEffectData = JSON.stringify(this.audioEffectModel)
 
   this.data?.putSync('audioData', audioData)
   this.data?.putSync('videoData', videoData)
   this.data?.putSync('otherData', otherData)
   this.data?.putSync('dumpData', dumpData)
+  this.data?.putSync('audioEffectData', audioEffectData)
 
   this.data?.flush(() => {
     if(success) {

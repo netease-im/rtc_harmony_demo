@@ -152,14 +152,14 @@ export struct AudioSetting {
               secondaryText: this.audioModel.audioMixPath
             }
           }).onClick(() => {
-            const audioSelectOptions = new picker.AudioSelectOptions
-            const audioPicker = new picker.AudioViewPicker
-            audioPicker.select(audioSelectOptions).then(result => {
-              let URI = result[0]
-              console.info(this.TAG, 'picker select to file URI: ' + URI)
-              this.audioModel.audioMixPath = URI
+            const selectOptions = new picker.DocumentSelectOptions
+            const audioPicker = new picker.DocumentViewPicker
+            audioPicker.select(selectOptions).then(result => {
+                let URI = result[0]
+                console.info(this.TAG, 'picker select to file URI: ' + URI)
+                this.audioModel.audioMixPath = URI
             }).catch((err: BusinessError) => {
-              console.error(this.TAG, `Invoke audioPicker select failed, code:${err.code}, message:${err.message}`)
+                console.error(this.TAG, `Invoke audioPicker select failed, code:${err.code}, message:${err.message}`)
             })
           })
 
@@ -202,6 +202,16 @@ export struct AudioSetting {
               }
             }
           })
+
+          NetEaseInputLogicDialog({
+            title: '音调',
+            content: String(this.audioModel.audioMixPitch),
+            onInputValue: value => {
+              if(Number.parseInt(value) != Number.NaN) {
+                this.audioModel.audioMixPitch = Number.parseInt(value)
+              }
+            }
+          })
         }
         .divider({
           strokeWidth: 1,
@@ -219,8 +229,8 @@ export struct AudioSetting {
               secondaryText: this.audioModel.audioEffect1Url
             }
           }).onClick(() => {
-            const audioSelectOptions = new picker.AudioSelectOptions
-            const audioPicker = new picker.AudioViewPicker
+            const audioSelectOptions = new picker.DocumentSelectOptions
+            const audioPicker = new picker.DocumentViewPicker
             audioPicker.select(audioSelectOptions).then(result => {
               let URI = result[0]
               console.info(this.TAG, 'picker select to file URI: ' + URI)
@@ -270,6 +280,16 @@ export struct AudioSetting {
             }
           })
 
+          NetEaseInputLogicDialog({
+            title: '音调',
+            content: String(this.audioModel.audioEffect1Pitch),
+            onInputValue: value => {
+              if(Number.parseInt(value) != Number.NaN) {
+                this.audioModel.audioEffect1Pitch = Number.parseInt(value)
+              }
+            }
+          })
+
         }.divider({
           strokeWidth: 1,
           startMargin: 10,
@@ -284,8 +304,8 @@ export struct AudioSetting {
               secondaryText: this.audioModel.externalAudioInputUrl
             }
           }).onClick(() => {
-            const audioSelectOptions = new picker.AudioSelectOptions
-            const audioPicker = new picker.AudioViewPicker
+            const audioSelectOptions = new picker.DocumentSelectOptions
+            const audioPicker = new picker.DocumentViewPicker
             audioPicker.select(audioSelectOptions).then(result => {
               let URI = result[0]
               this.audioModel.externalAudioInputUrl = URI
@@ -328,8 +348,8 @@ export struct AudioSetting {
               secondaryText: this.audioModel.externalSubAudioInputUrl
             }
           }).onClick(() => {
-            const audioSelectOptions = new picker.AudioSelectOptions
-            const audioPicker = new picker.AudioViewPicker
+            const audioSelectOptions = new picker.DocumentSelectOptions
+            const audioPicker = new picker.DocumentViewPicker
             audioPicker.select(audioSelectOptions).then(result => {
               let URI = result[0]
               this.audioModel.externalSubAudioInputUrl = URI

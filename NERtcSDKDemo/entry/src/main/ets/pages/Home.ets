@@ -79,9 +79,7 @@ struct Home {
       if(result) {
         this.networkResult = result
       }
-      if(this.networkQuality && this.networkResult) {
-        this.probeEnd = true
-      }
+      this.probeEnd = (this.networkQuality && this.networkResult) ? true: false
     }
   }
 
@@ -98,7 +96,12 @@ struct Home {
     builder: NetEaseProbeLoginDialog({
       networkQuality: this.networkQuality,
       networkResult: this.networkResult,
-      probeEnd: this.probeEnd
+      probeEnd: this.probeEnd,
+      probeReset: () => {
+        this.networkQuality = null
+        this.networkResult = null
+        this.probeEnd = false
+      }
     }),
     autoCancel: false,
     customStyle: false,
@@ -247,8 +250,9 @@ struct Home {
 
           Row({ space: 5 }) {
             Button('会前测速', { type: ButtonType.Normal, controlSize: ControlSize.SMALL, stateEffect: true, buttonStyle: ButtonStyleMode.NORMAL }).fontSize(18).clickEffect({ level: ClickEffectLevel.HEAVY, scale: 0.8 }).onClick(() => {
-              ChatPresenter.getInstance().enableLastMileProbe(true)
-              this.networkQualityDialog.open()
+              let ret = ChatPresenter.getInstance().enableLastMileProbe(true)
+              if(ret == NERtcConstants.ErrorCode.NO_ERROR)
+                this.networkQualityDialog.open()
             })
           }.justifyContent(FlexAlign.Start).margin({ top: 10, left: 10, right: 10})
         }

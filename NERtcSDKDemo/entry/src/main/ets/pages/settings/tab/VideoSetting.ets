@@ -391,8 +391,8 @@ export struct VideoSetting {
               secondaryText: this.videoModel.externalVideoPath
             }
           }).onClick(() => {
-            const audioSelectOptions = new picker.AudioSelectOptions
-            const audioPicker = new picker.AudioViewPicker
+            const audioSelectOptions = new picker.DocumentSelectOptions
+            const audioPicker = new picker.DocumentViewPicker
             audioPicker.select(audioSelectOptions).then(result => {
               let URI = result[0]
               console.info(this.TAG, 'picker select to file URI: ' + URI)
@@ -474,8 +474,8 @@ export struct VideoSetting {
               secondaryText: this.videoModel.externalSubVideoPath
             }
           }).onClick(() => {
-            const audioSelectOptions = new picker.AudioSelectOptions
-            const audioPicker = new picker.AudioViewPicker
+            const audioSelectOptions = new picker.DocumentSelectOptions
+            const audioPicker = new picker.DocumentViewPicker
             audioPicker.select(audioSelectOptions).then(result => {
               let URI = result[0]
               console.info(this.TAG, 'picker select to file URI: ' + URI)

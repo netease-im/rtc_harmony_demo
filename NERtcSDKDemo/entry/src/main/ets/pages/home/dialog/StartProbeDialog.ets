@@ -9,6 +9,8 @@ export struct NetEaseProbeLoginDialog {
   @Link probeEnd: boolean
   controller?: CustomDialogController
 
+  probeReset?:() => void;
+
   private GetNetWorkQuality(): string {
     let quality: string = '质量未知'
     if(this.networkQuality) {
@@ -116,6 +118,7 @@ export struct NetEaseProbeLoginDialog {
       Button(this.probeEnd ? '退出':'停止测速', { type: ButtonType.Capsule, stateEffect: true, buttonStyle: ButtonStyleMode.NORMAL }).margin({ top: 20, bottom: 20 }).onClick(() => {
         if(this.probeEnd) {
           this.controller?.close()
+          if(this.probeReset) this.probeReset()
         } else {
           ChatPresenter.getInstance().enableLastMileProbe(false)
           this.controller?.close()

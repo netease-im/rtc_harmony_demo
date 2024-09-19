@@ -9,6 +9,7 @@ import { FUNC } from './settings/model/common'
 import router from '@ohos.router';
 import * as model from './chat/ChatModel'
 import { DumpSetting } from './settings/tab/DumpSettings'
+import { AudioEffectSetting } from './settings/tab/AudioEffectSettings'
 
 @Entry
 @Component
@@ -23,6 +24,7 @@ struct Settings {
   @State audioModel: parcelable.AudioModel = new parcelable.AudioModel
   @State otherModel: parcelable.OtherModel = new parcelable.OtherModel
   @State dumpModel: parcelable.DumpModel = new parcelable.DumpModel
+  @State audioEffectModel: parcelable.AudioEffectModel = new parcelable.AudioEffectModel
 
   private ReInitDialog: CustomDialogController = new CustomDialogController({
     builder: LoadingDialog({
@@ -80,6 +82,10 @@ struct Settings {
           TabContent() {
             DumpSetting({ dumpModel: $dumpModel}).width('100%').height('100%')
           }.tabBar(BottomTabBarStyle.of($r('app.media.video_dump'), '视频Dump'))
+
+          TabContent() {
+            AudioEffectSetting({ audioEffectModel: $audioEffectModel}).width('100%').height('100%')
+          }.tabBar(BottomTabBarStyle.of($r('app.media.audio_effect'), '变声美声'))
 
           TabContent() {
             OtherSetting({ otherModel: $otherModel, isInMeeting: !this.reInit }).width('100%').height('100%')

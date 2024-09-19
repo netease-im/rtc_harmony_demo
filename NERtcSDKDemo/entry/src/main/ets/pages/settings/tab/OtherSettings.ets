@@ -11,6 +11,7 @@ export struct OtherSetting {
   private serverRecordModeArray: string[] = ['混合与单人同时录制', '混合录制', '单人录制']
   private upFallbackOptionArray: string[] = ['DISABLED', 'AUDIO_ONLY']
   private downFallbackOptionArray: string[] = ['VIDEO_STREAM_LOW', 'AUDIO_ONLY']
+  private channelProfileArray: string[] = ['Communication', 'LiveBroadcasting']
   public isInMeeting: boolean = false;
 
   private isHiddenInMeeting(): Visibility {
@@ -31,7 +32,6 @@ export struct OtherSetting {
 
         ListItemGroup({ header: this.itemHead('通用')}) {
 
-
           ComposeListItem({
             contentItem: {
               primaryText: '质量透明'
@@ -46,6 +46,15 @@ export struct OtherSetting {
               }
             }
           })
+
+          NetEaseListLogicDialog({
+            array: this.channelProfileArray,
+            title: '房间场景',
+            index: this.otherModel.channelProfile,
+            choose: index => {
+              this.otherModel.channelProfile = index
+            }
+          }).visibility(this.isHiddenInMeeting())
 
           NetEaseListLogicDialog({
             array: this.upFallbackOptionArray,

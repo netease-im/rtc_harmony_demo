@@ -63,10 +63,11 @@ export struct MoreFunction {
 
   whiteBlackDialog: CustomDialogController = new CustomDialogController({
     builder: WhiteBlackListDialog({
-      callback: (blackList: string|null, whiteList:string|null) => {
+      callback: (blackList: string|null, pubWhiteList:string|null, subWhiteList) => {
         let black_list_array = this.fillStringToBigUint64Array(blackList)
-        let white_list_array = this.fillStringToBigUint64Array(whiteList)
-        ChatPresenter.getInstance().setBlackWhiteList(black_list_array, white_list_array)
+        let pub_white_list_array = this.fillStringToBigUint64Array(pubWhiteList)
+        let sub_white_list_array = this.fillStringToBigUint64Array(subWhiteList)
+        ChatPresenter.getInstance().setBlackWhiteList(black_list_array, pub_white_list_array, sub_white_list_array)
       }
     }),
     alignment: DialogAlignment.Center,
@@ -181,9 +182,21 @@ export struct MoreFunction {
         }
 
         GridItem() {
+          Button('设置伴音音调', { type: ButtonType.Normal, stateEffect: true}).onClick(() => {
+            ChatPresenter.getInstance().setAudioMixingPitch()
+          }).width('100%').height(50).fontSize(15).borderRadius(10)
+        }
+
+        GridItem() {
           Button(!this.audioEffectEnable ? '音效开':'音效关', { type: ButtonType.Normal, stateEffect: true}).onClick(() => {
             ChatPresenter.getInstance().enableAudioEffect(!this.audioEffectEnable)
             this.audioEffectEnable = !this.audioEffectEnable
+          }).width('100%').height(50).fontSize(15).borderRadius(10)
+        }
+
+        GridItem() {
+          Button('设置音效音调', { type: ButtonType.Normal, stateEffect: true}).onClick(() => {
+            ChatPresenter.getInstance().setAudioEffectPitch()
           }).width('100%').height(50).fontSize(15).borderRadius(10)
         }
 
@@ -371,7 +384,7 @@ export struct MoreFunction {
           Button('自定义上报', { type: ButtonType.Normal, stateEffect: true }).onClick(() => {
             ChatPresenter.getInstance().reportCustomEvent()
             Prompt.showToast({ message: '自定义上报成功，请查看qs'})
-          })
+          }).width('100%').height(50).fontSize(15).borderRadius(10)
         }
       }
     }.width('100%').height(250).columnsTemplate('1fr 1fr 1fr').backgroundColor(Color.Grey).columnsGap(5).rowsGap(5).padding(5)
