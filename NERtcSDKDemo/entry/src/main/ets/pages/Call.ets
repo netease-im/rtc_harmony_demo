@@ -10,6 +10,29 @@ import common from '@ohos.app.ability.common';
 
 import { NERtcCallbackEx, NERtcConstants, NERtcSDK, NERtcCallback} from 'sdk/Index';
 
+
+class MyDataSource implements IDataSource {
+  private list: number[] = []
+
+  constructor(list: number[]) {
+    this.list = list
+  }
+
+  totalCount(): number {
+    return this.list.length
+  }
+
+  getData(index: number): number {
+    return this.list[index]
+  }
+
+  registerDataChangeListener(listener: DataChangeListener): void {
+  }
+
+  unregisterDataChangeListener() {
+  }
+}
+
 @Entry
 @Component
 struct Call {
@@ -33,6 +56,16 @@ struct Call {
 
   viewSwitched : boolean = false;
 
+  private swiperController: SwiperController = new SwiperController()
+  private data: MyDataSource = new MyDataSource([])
+
+  aboutToAppear(): void {
+    let list: number[] = []
+    for (let i = 1; i <= 2; i++) {
+      list.push(i);
+    }
+    this.data = new MyDataSource(list)
+  }
 
   uiDelegate: ChatNotify = {
 
@@ -160,18 +193,24 @@ struct Call {
 
             Column() {
               if(this.users[0]) {
-                NERtcVideoView({
-                  canvasId: this.users[0].xComponentIdMain,
-                  onLoad: (() => {
-                    console.info(this.TAG, `User:${this.login?.uid} surface create.`)
-                    let user = this.users.find(user => user.uid == BigInt(this.login?.uid ?? "0"))
-                    if(user) this.chat?.attach(user)
-                  }),
-                  onDestroy: (() => {
-                    console.info(this.TAG, `User:${this.login?.uid} surface release.`)
-                    // this.resetViewPostion();
+                Swiper(this.swiperController) {
+                  LazyForEach(this.data, (item: string) => {
+                    if(item == "1") {
+                      NERtcVideoView({
+                        canvasId: this.users[0].xComponentIdMain,
+                        onLoad: (() => {
+                          console.info(this.TAG, `User:${this.login?.uid} surface create.`)
+                          let user = this.users.find(user => user.uid == BigInt(this.login?.uid ?? "0"))
+                          if(user) this.chat?.attach(user)
+                        }),
+                        onDestroy: (() => {
+                          console.info(this.TAG, `User:${this.login?.uid} surface release.`)
+                          // this.resetViewPostion();
+                        })
+                      })
+                    }
                   })
-                })
+                }
               }
             }.width(this.bigCanvas).height(this.bigCanvas).zIndex(this.bigZIndex)
 
