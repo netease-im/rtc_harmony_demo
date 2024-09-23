@@ -4,7 +4,8 @@ import { NERtcCallbackEx, NERtcConstants, NERtcAudioFrameObserver, NERtcVideoFra
 import { RtcDemoLogic } from './RtcDemoLogic'
 import RtcDemoFileManager, { RtcDemoFileInfo } from './RtcDemoFileManager';
 import RtcDemoTimeUtil from './RtcDemoTimeUtil'
-import { collections } from '@kit.ArkTS'
+import { collections, taskpool } from '@kit.ArkTS'
+import { testTransfer } from './TaskPoolTest'
 
 // @Sendable
 export class RtcDemoCallback extends NERtcCallbackEx {
@@ -119,6 +120,12 @@ export class RtcDemoCallback extends NERtcCallbackEx {
 }
 
 @Sendable
+function sendableTestFunction(data: Uint8Array) {
+  let task: taskpool.Task = new taskpool.Task(testTransfer, data)
+  taskpool.execute(task)
+}
+
+@Sendable
 export class RtcDemoAudioFrameObserver implements NERtcAudioFrameObserver {
   protected tag: string = "RtcDemoAudioFrameObserver";
   private file_info_local_record: RtcDemoFileInfo|null = null;
@@ -204,6 +211,11 @@ export class RtcDemoAudioFrameObserver implements NERtcAudioFrameObserver {
     if (this.file_info_local_record) {
       RtcDemoFileManager.sharedInstance().writeDataToFile(this.file_info_local_record.fd, frame.data);
     }
+
+    //测试在 sendable 对象将数据抛到另外线程中去执行
+    //如果要抛到其他线程，需要拷贝一份，不然方法执行完，frame.data 的内存就会释放。
+    let copy_data = frame.data.slice()
+    sendableTestFunction(copy_data)
   }
 
   onPlaybackFrame(frame: NERtcConstants.NERtcAudioFrame): void {
