@@ -7,10 +7,12 @@ import { NetEaseProbeLoginDialog } from '../pages/home/dialog/StartProbeDialog'
 import SDK from './chat/Presenter1'
 import UIDelegate, { OPERATOR } from './chat/Delegate';
 import DemoUser from '../model/DemoUser';
-import { NERtcConstants } from 'sdk';
+import { NERtcConstants } from '@nertc/nertc_sdk';
 import ChatPresenter from './chat/Presenter1';
 import fs from '@ohos.file.fs';
 import { bundleManager } from '@kit.AbilityKit';
+import { connection } from '@kit.NetworkKit';
+import { BusinessError } from '@kit.BasicServicesKit';
 
 
 @Entry
@@ -60,6 +62,10 @@ struct Home {
       } else {
         userId = String(user.get('uid'))
       }
+
+      //fix issue for OMNRTCG2-58636
+      if(this.uid == '0')
+        this.uid = userId
 
       if(this.uid == userId && operator == OPERATOR.ADD) {
         this.joinRoomDialog.close()

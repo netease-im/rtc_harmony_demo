@@ -1,6 +1,6 @@
 import DemoUser from '../../model/DemoUser';
 import { DemoLogicMap, LocalVolumeInfo, RemoteVolumeInfo } from './ChatModel';
-import { NERtcConstants } from 'sdk'
+import { NERtcConstants } from '@nertc/nertc_sdk'
 
 export enum OPERATOR {
   ADD = 0,

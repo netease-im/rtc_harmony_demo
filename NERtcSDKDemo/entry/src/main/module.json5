@@ -20,6 +20,7 @@
         "label": "$string:EntryAbility_label",
         "startWindowIcon": "$media:icon",
         "startWindowBackground": "$color:start_window_background",
+        "orientation": "auto_rotation_restricted",
         "exported": true,
         "backgroundModes": ["audioRecording", "audioPlayback"],
         "skills": [
@@ -56,7 +57,22 @@
         }
       },
       {
-        "name" : "ohos.permission.KEEP_BACKGROUND_RUNNING"
+        "name" : "ohos.permission.KEEP_BACKGROUND_RUNNING",
+        "usedScene": {
+          "abilities": [
+            "FormAbility"
+          ],
+          "when":"always"
+        }
+      },
+      {
+        "name": "ohos.permission.GET_NETWORK_INFO",
+        "usedScene": {
+          "abilities": [
+            "FormAbility"
+          ],
+          "when":"always"
+        }
       }
     ]
   }

@@ -1,4 +1,4 @@
-import { NERtcVideoView } from 'sdk'
+import { NERtcVideoView } from '@nertc/nertc_sdk'
 import { SelectDialog } from '@kit.ArkUI';
 
 @Component

@@ -1,3 +1,10 @@
+[1.4.0-beta] - 2024.10.16
+> api:12 ide:5.0.3.900 鸿蒙系统版本:NEXT.0.0.71
+- 屏幕方向支持
+- 新增接口:setPlaybackBeforeMixingAudioFrameParameters
+- 新增屏幕共享错误码
+- 稳定性提升
+
 [1.3.0-beta] - 2024.09.13
 > api:12 ide:5.0.3.706 鸿蒙系统版本:NEXT.0.0.61
 - 变声美声功能实现

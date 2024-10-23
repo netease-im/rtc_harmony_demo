@@ -1,19 +1,33 @@
 {
   "app": {
-    "signingConfigs": [],
+    "signingConfigs": [
+      {
+        "name": "default",
+        "type": "HarmonyOS",
+        "material": {
+          "certpath": "/Users/yanghui/.ohos/config/default_NERtcSDKDemo_fC4X2KBaSsegelMsDG7dURDErenAy5xkkPJWnu7cV_U=.cer",
+          "storePassword": "0000001B400803AA044ADEAA338C116E9AEB6CB9F5AEAAF2B1D9CCA4E5855839650A05A75668CA8FC353EE",
+          "keyAlias": "debugKey",
+          "keyPassword": "0000001B4FD8A79513BBF0392CFB5BEDF48DA6A7899347742B4ABF384C3BCAC21B82F02B73EB0FB5890EC0",
+          "profile": "/Users/yanghui/.ohos/config/default_NERtcSDKDemo_fC4X2KBaSsegelMsDG7dURDErenAy5xkkPJWnu7cV_U=.p7b",
+          "signAlg": "SHA256withECDSA",
+          "storeFile": "/Users/yanghui/.ohos/config/default_NERtcSDKDemo_fC4X2KBaSsegelMsDG7dURDErenAy5xkkPJWnu7cV_U=.p12"
+        }
+      }
+    ],
     "products": [
       {
         "name": "default",
+        "buildOption": {
+          "strictMode": {
+            "useNormalizedOHMUrl": true
+          }
+        },
         "signingConfig": "default",
         "compatibleSdkVersion": "5.0.0(12)",
         "targetSdkVersion": "5.0.0(12)",
         "compatibleSdkVersionStage": "beta3",
         "runtimeOS": "HarmonyOS",
-        "buildOption": {
-          "strictMode": {
-            "useNormalizedOHMUrl": true
-          }
-        }
       }
     ],
     "buildModeSet": [

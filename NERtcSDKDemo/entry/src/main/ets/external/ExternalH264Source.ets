@@ -1,5 +1,5 @@
 import fs from '@ohos.file.fs';
-import { NERtcSDK, NERtcConstants} from 'sdk'
+import { NERtcSDK, NERtcConstants} from '@nertc/nertc_sdk'
 import * as common from '../model/common'
 
 enum FrameType{
@@ -179,7 +179,7 @@ export default class ExternalH264Source {
       this.destBuffer.set(ppsframe.data, spsframe.size)
       this.destBuffer.set(videoframe.bufferView, spsframe.size + ppsframe.size)
       encodedFrame.nalData = this.destBuffer
-      let ret = NERtcSDK.getInstance().pushExternalVideoEncodedFrame(this.type, encodedFrame)
+      let ret:number = NERtcSDK.getInstance().pushExternalVideoEncodedFrame(this.type, encodedFrame);
       console.info(this.TAG, 'PUSH I FRAME ret: ' + ret)
       if(ret != NERtcConstants.ErrorCode.NO_ERROR) {
         console.error(this.TAG, '=== push external encoded video frame error ====')
@@ -188,7 +188,7 @@ export default class ExternalH264Source {
       encodedFrame.frameType = NERtcConstants.NERtcNalFrameType.NAL_FRAME_TYPE_P
       encodedFrame.nalLengths = new Uint32Array([videoframe.size])
       encodedFrame.nalData = videoframe.bufferView
-      let ret = NERtcSDK.getInstance().pushExternalVideoEncodedFrame(this.type, encodedFrame)
+      let ret: number = NERtcSDK.getInstance().pushExternalVideoEncodedFrame(this.type, encodedFrame)
       console.info(this.TAG, 'PUSH P FRAME ret: ' + ret)
       if(ret != NERtcConstants.ErrorCode.NO_ERROR) {
         console.error(this.TAG, '=== push external encoded video frame error ===')

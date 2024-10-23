@@ -1,4 +1,4 @@
-import { NERtcConstants, NERtcPreDecodeObserver } from 'sdk'
+import { NERtcConstants, NERtcPreDecodeObserver } from '@nertc/nertc_sdk'
 import { collections } from '@kit.ArkTS'
 import fs from '@ohos.file.fs'
 
@@ -26,7 +26,7 @@ export class DemoNERtcPreDecodeObserver implements NERtcPreDecodeObserver {
 
     try {
       let uid: bigint = preDecodeFrame.uid
-      let mediaType = preDecodeFrame.mediaType
+      let mediaType: number = preDecodeFrame.mediaType
       let stuff: string = preDecodeFrame.codec
       let isMain: string = preDecodeFrame.isMainStream ? 'main':'sub'
 
@@ -47,8 +47,8 @@ export class DemoNERtcPreDecodeObserver implements NERtcPreDecodeObserver {
         let offset = this.offsets.get(fd)
         if(offset == undefined) offset = 0
 
-        let byteLength = preDecodeFrame.data.byteLength
-        let frameLen = preDecodeFrame.length
+        let byteLength: number = preDecodeFrame.data.byteLength
+        let frameLen: number = preDecodeFrame.length
         console.info(this.TAG, `byteLength: ${byteLength}, frameLen: ${frameLen}`)
 
         let len = fs.writeSync(fd, preDecodeFrame.data.buffer, { offset: offset, length: preDecodeFrame.length })

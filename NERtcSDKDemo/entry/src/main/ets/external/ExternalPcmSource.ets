@@ -1,7 +1,7 @@
-import { NERtcConstants } from 'sdk/Index';
+import { NERtcConstants } from '@nertc/nertc_sdk/Index';
 import fs from '@ohos.file.fs';
 import prompt from '@ohos.promptAction';
-import { NERtcSDK } from 'sdk';
+import { NERtcSDK } from '@nertc/nertc_sdk';
 import * as common from '../model/common'
 
 const CUSTOM_AUDIO_TIME_DURATION: number = 20

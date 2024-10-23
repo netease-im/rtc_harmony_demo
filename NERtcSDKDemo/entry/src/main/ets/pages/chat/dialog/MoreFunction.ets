@@ -4,6 +4,7 @@ import { CallDetailDialog } from './CallDetailDialog';
 import { SubDetailDialog } from './SubDetailDialog';
 import { UI } from '../ChatModel';
 import { WhiteBlackListDialog } from './WhiteBlackListDialog';
+import Handle from '../../../common/Handle'
 
 @Component
 export struct MoreFunction {
@@ -382,8 +383,10 @@ export struct MoreFunction {
 
         GridItem() {
           Button('自定义上报', { type: ButtonType.Normal, stateEffect: true }).onClick(() => {
-            ChatPresenter.getInstance().reportCustomEvent()
-            Prompt.showToast({ message: '自定义上报成功，请查看qs'})
+            // ChatPresenter.getInstance().reportCustomEvent()
+            // Prompt.showToast({ message: '自定义上报成功，请查看qs'})
+            let rel = Handle.getInstance().syncGet()
+            console.info('Handle', 'rel: ' + rel)
           }).width('100%').height(50).fontSize(15).borderRadius(10)
         }
       }

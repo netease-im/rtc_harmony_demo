@@ -1,6 +1,6 @@
 // RtcDemoLogic + RtcDemoCallback 用于 sendable 对象与非 sendable 对象的交互
 
-import { NERtcCallbackEx, NERtcConstants, NERtcAudioFrameObserver, NERtcVideoFrameObserver } from 'sdk'
+import { NERtcCallbackEx, NERtcConstants, NERtcAudioFrameObserver, NERtcVideoFrameObserver } from '@nertc/nertc_sdk'
 import { RtcDemoLogic } from './RtcDemoLogic'
 import RtcDemoFileManager, { RtcDemoFileInfo } from './RtcDemoFileManager';
 import RtcDemoTimeUtil from './RtcDemoTimeUtil'
@@ -214,7 +214,7 @@ export class RtcDemoAudioFrameObserver implements NERtcAudioFrameObserver {
 
     //测试在 sendable 对象将数据抛到另外线程中去执行
     //如果要抛到其他线程，需要拷贝一份，不然方法执行完，frame.data 的内存就会释放。
-    let copy_data = frame.data.slice()
+    let copy_data: Uint8Array = frame.data.slice();
     sendableTestFunction(copy_data)
   }
 

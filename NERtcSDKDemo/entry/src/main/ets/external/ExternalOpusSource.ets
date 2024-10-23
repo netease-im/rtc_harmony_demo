@@ -1,4 +1,4 @@
-import { NERtcConstants, NERtcSDK } from 'sdk/Index';
+import { NERtcConstants, NERtcSDK } from '@nertc/nertc_sdk/Index';
 import fs from '@ohos.file.fs';
 import * as common from '../model/common'
 

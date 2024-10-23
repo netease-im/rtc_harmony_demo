@@ -1,6 +1,8 @@
 // 自定义加密实现类
-import { NERtcConstants } from 'sdk'
-import { NERtcPacketObserver } from 'sdk/src/main/ets/default/sdk/NERtcCallback'
+import { NERtcConstants } from '@nertc/nertc_sdk'
+
+import { NERtcPacketObserver } from '@nertc/nertc_sdk'
+
 import ARC4 from '../../common/ARC4'
 import { util } from '@kit.ArkTS'
 

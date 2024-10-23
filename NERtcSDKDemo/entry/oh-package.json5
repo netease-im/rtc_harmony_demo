@@ -8,8 +8,8 @@
   "version": "1.0.0",
   "dependencies": {
     //集成线下包
-    "sdk": "file:libs/nertc_sdk.har",
+    "@nertc/nertc_sdk": "file:libs/nertc_sdk.har",
     //openharmony仓库集成
-    //"@nertc/nertc_sdk": "1.3.0-beta"
+    //"@nertc/nertc_sdk": "1.4.0-beta"
   }
 }

@@ -1,7 +1,8 @@
 import fs from '@ohos.file.fs';
-import NERtcConstants from 'sdk/src/main/ets/default/sdk/NERtcConstants';
+
+import { NERtcConstants } from '@nertc/nertc_sdk';
 import prompt from '@ohos.promptAction';
-import { NERtcSDK } from 'sdk';
+import { NERtcSDK } from '@nertc/nertc_sdk';
 import * as common from '../model/common'
 
 export class ExternalYuvVideoSource {

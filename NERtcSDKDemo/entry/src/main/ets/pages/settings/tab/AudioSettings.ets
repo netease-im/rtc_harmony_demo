@@ -113,21 +113,6 @@ export struct AudioSetting {
               this.audioModel.audioDumpType = index
             }
           })
-
-          ComposeListItem({
-            contentItem: {
-              primaryText: '开启音频数据回调',
-            },
-            operateItem: {
-              switch: {
-                isCheck: this.audioModel.enableFrameObserver,
-                onChange: value => {
-                  this.audioModel.enableFrameObserver = value
-                  Prompt.showToast({ message: value ? "开启了音频数据回调" : "关闭了音频数据回调"})
-                }
-              }
-            }
-          }).visibility(this.isHiddenInMeeting())
         }
         .divider({
           strokeWidth: 1,
@@ -465,12 +450,27 @@ export struct AudioSetting {
             }
           })
 
+          ComposeListItem({
+            contentItem: {
+              primaryText: '开启音频数据回调',
+            },
+            operateItem: {
+              switch: {
+                isCheck: this.audioModel.enableFrameObserver,
+                onChange: value => {
+                  this.audioModel.enableFrameObserver = value
+                  Prompt.showToast({ message: value ? "开启了音频数据回调" : "关闭了音频数据回调"})
+                }
+              }
+            }
+          })
+
         }.divider({
           strokeWidth: 1,
           startMargin: 10,
           endMargin: 10,
           color: '#F1F3F5'
-        })
+        }).visibility(this.isHiddenInMeeting())
 
       }.width('100%').height('100%')
       .scrollBar(BarState.Auto)

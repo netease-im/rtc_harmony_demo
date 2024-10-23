@@ -1,5 +1,6 @@
-import { NERtcConstants, NERtcSDK, NERtcCallbackEx} from 'sdk/Index';
-import { NERtcPacketObserver} from 'sdk/src/main/ets/default/sdk/NERtcCallback';
+import { NERtcConstants, NERtcSDK, NERtcCallbackEx} from '@nertc/nertc_sdk';
+
+import { NERtcPacketObserver} from '@nertc/nertc_sdk';
 import Config from '../../common/Config';
 import DemoUser from '../../model/DemoUser';
 import { ChatState, DemoLogicMap, LocalVolumeInfo, LoginInfo } from './ChatModel';
@@ -74,7 +75,7 @@ export default class ChatPresenter extends NERtcCallbackEx {
       });
       setTimeout(() => {
         if (gAudioModel) {
-          let ret = NERtcSDK.getInstance().enableLocalAudio(gAudioModel.autoOpenAudio);
+          let ret: number = NERtcSDK.getInstance().enableLocalAudio(gAudioModel.autoOpenAudio);
           console.info(TAG, 'EnableLocalAudio: ' + ret);
         }
         if (gVideoModel) {
@@ -333,7 +334,7 @@ export default class ChatPresenter extends NERtcCallbackEx {
     let param: object = new Object();
     //云信内部使用字段，开发者不要使用。可申请两个appkey，一个作为生产环境，一个作为正式环境。
     param["sdk.enable.debug.environment"] = true;
-    //设置SDK日志是否加密，调试阶段打开，上线阶段关闭
+    //设置SDK日志是否加密，调试阶段关闭，上线阶段打开
     param["sdk.enable.encrypt.log"] = false;
     if(gAudioModel) {
       param[NERtcConstants.NERtcParameterKey.kNERtcKeyAutoSubscribeAudio] = gAudioModel.autoSubAudio
@@ -384,14 +385,14 @@ export default class ChatPresenter extends NERtcCallbackEx {
         NERtcSDK.getInstance().enableDualStreamMode(gVideoModel.mainEnableDualStream)
 
         //主流设置
-        let configMain = new NERtcConstants.NERtcVideoEncodeConfiguration
+        let configMain: NERtcConstants.NERtcVideoEncodeConfiguration = new NERtcConstants.NERtcVideoEncodeConfiguration
         configMain.maxProfile = gVideoModel.mainSendResolution
         configMain.degradationPreference = gVideoModel.mainEncodeFrameMode
         configMain.framerate = this.translateFrameRate(gVideoModel.mainEncodeFrameRate)
         configMain.cropMode = gVideoModel.mainCropMode
         configMain.mirrorMode = gVideoModel.mainMirrorMode
 
-        let ret = NERtcSDK.getInstance().setLocalVideoConfig(configMain, NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeMain)
+        let ret: number = NERtcSDK.getInstance().setLocalVideoConfig(configMain, NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeMain)
         console.info(TAG, `set main localVideoConfig ret:${ret}, config:${JSON.stringify(configMain)}`)
 
         //设置主流capture.
@@ -406,7 +407,7 @@ export default class ChatPresenter extends NERtcCallbackEx {
         }
 
         //辅流设置
-        let configSub = new NERtcConstants.NERtcVideoEncodeConfiguration
+        let configSub: NERtcConstants.NERtcVideoEncodeConfiguration = new NERtcConstants.NERtcVideoEncodeConfiguration
         configSub.maxProfile = gVideoModel.subSendResolution
         configSub.degradationPreference = gVideoModel.subEncodeFrameMode
         configSub.framerate = this.translateFrameRate(gVideoModel.subEncodeFrameRate)
@@ -471,7 +472,7 @@ export default class ChatPresenter extends NERtcCallbackEx {
       // other settings.
       if(gOtherModel) {
         let channelProfile = gOtherModel.channelProfile
-        let ret = NERtcSDK.getInstance().setChannelProfile(channelProfile)
+        let ret: number = NERtcSDK.getInstance().setChannelProfile(channelProfile)
         console.info(TAG, `setChannelProfile: ${ret}`)
       }
 
@@ -604,7 +605,7 @@ export default class ChatPresenter extends NERtcCallbackEx {
   }
 
   checkPermission(): boolean {
-    let list = NERtcSDK.getInstance().checkPermission()
+    let list: string[]|null = NERtcSDK.getInstance().checkPermission()
     if(!list) {
       Prompt.showToast({ message : '未能成功检查权限' })
       return false
@@ -629,26 +630,68 @@ export default class ChatPresenter extends NERtcCallbackEx {
       if(gOtherModel && gOtherModel.chatDetail) {
         NERtcSDK.getInstance().setStatsObserver({
           onRtcStats:(stats: NERtcConstants.NERtcStats): void =>{
+            let detailInfo = JSON.stringify(stats, (key, value: Object) => {
+              if(typeof value === "bigint") {
+                return String(value)
+              }
+              return value
+            })
+            console.info('statsObserver', `onRtcStats: ${detailInfo}`)
             delegates_?.forEach(delegate_ => {
               if(delegate_?.detail) {
-                delegate_?.detail(JSON.stringify(stats, (key, value: Object) => {
-                  if(typeof value === "bigint") {
-                    return String(value)
-                  }
-                  return value
-                }))
+                delegate_?.detail(detailInfo)
               }
             });
           },
+
           onLocalAudioStats: (stats: NERtcConstants.NERtcAudioSendStats):void =>{
+            let detailInfo = JSON.stringify(stats, (key, value: Object) => {
+              if(typeof value === "bigint") {
+                return String(value)
+              }
+              return value
+            })
+            console.info('statsObserver', `onLocalAudioStats: ${detailInfo}`)
           },
+
           onRemoteAudioStats: (statsArray: Array<NERtcConstants.NERtcAudioRecvStats>): void => {
+            let detailInfo = JSON.stringify(statsArray, (key, value: Object) => {
+              if(typeof value === "bigint") {
+                return String(value)
+              }
+              return value
+            })
+            console.info('statsObserver', `onRemoteAudioStats: ${detailInfo}`)
           },
+
           onLocalVideoStats: (stats: NERtcConstants.NERtcVideoSendStats):void =>{
+            let detailInfo = JSON.stringify(stats, (key, value: Object) => {
+              if(typeof value === "bigint") {
+                return String(value)
+              }
+              return value
+            })
+            console.info('statsObserver', `onLocalVideoStats: ${detailInfo}`)
           },
+
           onRemoteVideoStats: (statsArray: Array<NERtcConstants.NERtcVideoRecvStats>):void => {
+            let detailInfo = JSON.stringify(statsArray, (key, value: Object) => {
+              if(typeof value === "bigint") {
+                return String(value)
+              }
+              return value
+            })
+            console.info('statsObserver', `onRemoteVideoStats: ${detailInfo}`)
           },
+
           onNetworkQuality:(statsArray: Array<NERtcConstants.NERtcNetworkQualityInfo>):void => {
+            let detailInfo = JSON.stringify(statsArray, (key, value: Object) => {
+              if(typeof value === "bigint") {
+                return String(value)
+              }
+              return value
+            })
+            console.info('statsObserver', `onNetworkQuality: ${detailInfo}`)
           }
         })
       }
@@ -660,11 +703,11 @@ export default class ChatPresenter extends NERtcCallbackEx {
          * AUDIO_ONLY: 上行网络较弱时，只发布音频流。
          */
         let upFallbackOption = gOtherModel.upFallbackOption
-        let streamOption = NERtcConstants.StreamFallbackOption.DISABLED
+        let streamOption: number  = NERtcConstants.StreamFallbackOption.DISABLED
         if(upFallbackOption == 1) {
           streamOption = NERtcConstants.StreamFallbackOption.AUDIO_ONLY
         }
-        let ret = NERtcSDK.getInstance().setLocalPublishFallbackOption(streamOption)
+        let ret: number = NERtcSDK.getInstance().setLocalPublishFallbackOption(streamOption)
         console.info(TAG, `setLocalPublishFallbackOption ret:${ret}`)
 
         /***
@@ -688,6 +731,15 @@ export default class ChatPresenter extends NERtcCallbackEx {
     } catch (e) {
       console.error(TAG, JSON.stringify(e))
     }
+
+
+    let format = new NERtcConstants.NERtcAudioFrameRequestFormat
+    format.channels = 1
+    format.sampleRate = 16000
+    format.opMode = NERtcConstants.NERtcAudioFrameOpMode.kNERtcAudioFrameOpModeReadOnly
+    NERtcSDK.getInstance().setMixedAudioFrameParameters(format)
+    NERtcSDK.getInstance().setPlaybackAudioFrameParameters(format)
+    NERtcSDK.getInstance().setRecordingAudioFrameParameters(format)
 
     login_ = login;
     let ret: number = NERtcConstants.ErrorCode.NO_ERROR
@@ -714,12 +766,16 @@ export default class ChatPresenter extends NERtcCallbackEx {
 
   attach(user: DemoUser): void {
 
-    let scaleMode = NERtcConstants.NERtcVideoScalingMode.kNERtcVideoScaleFit
+    let scaleMode: number = NERtcConstants.NERtcVideoScalingMode.kNERtcVideoScaleFit
     if(gVideoModel) {
       scaleMode = gVideoModel.scaleMode
     }
 
     let canvas: NERtcConstants.NERtcVideoCanvas = { canvasId: user.xComponentIdMain, scalingMode: scaleMode }
+    //fix issue for OMNRTCG2-58636
+    if(login_ && login_.uid == '0') {
+      login_.uid = user.uid.toString()
+    }
     let isMe = user.uid.toString() === login_?.uid
     let ret: number;
     if(isMe) {
@@ -735,7 +791,7 @@ export default class ChatPresenter extends NERtcCallbackEx {
       return
     }
 
-    let scaleMode = NERtcConstants.NERtcVideoScalingMode.kNERtcVideoScaleFit
+    let scaleMode: number = NERtcConstants.NERtcVideoScalingMode.kNERtcVideoScaleFit
     if(gVideoModel) {
       scaleMode = gVideoModel.scaleMode
     }
@@ -786,7 +842,7 @@ export default class ChatPresenter extends NERtcCallbackEx {
   }
 
   muteVideo(mute: boolean) {
-    let ret = NERtcSDK.getInstance().muteLocalVideo(NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeMain, mute)
+    let ret: number = NERtcSDK.getInstance().muteLocalVideo(NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeMain, mute)
     console.info(TAG, `muteVideo mute:${mute}, ret:${ret}`)
     if(ret == NERtcConstants.ErrorCode.NO_ERROR) {
       Prompt.showToast({ message: `本地主流视频:${mute ? 'mute':'unmute'} ret:${ret}`})
@@ -794,7 +850,7 @@ export default class ChatPresenter extends NERtcCallbackEx {
   }
 
   muteSubVideo(mute: boolean) {
-    let ret = NERtcSDK.getInstance().muteLocalVideo(NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeSub, mute)
+    let ret: number = NERtcSDK.getInstance().muteLocalVideo(NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeSub, mute)
     console.info(TAG, `muteSubVideo mute:${mute}, ret:${ret}`)
     if(ret == NERtcConstants.ErrorCode.NO_ERROR) {
       Prompt.showToast({ message: `本地辅流视频:${mute ? 'mute':'unmute'} ret:${ret}`})
@@ -802,7 +858,7 @@ export default class ChatPresenter extends NERtcCallbackEx {
   }
 
   enableAudio(enabled: boolean) {
-    let ret = NERtcSDK.getInstance().enableLocalAudio(enabled)
+    let ret: number = NERtcSDK.getInstance().enableLocalAudio(enabled)
     console.info(TAG, `enableAudio enabled:${ret}`)
     if(ret == NERtcConstants.ErrorCode.NO_ERROR) {
       Prompt.showToast({ message: `本地音频:${enabled?'开':'关'}`})
@@ -810,7 +866,7 @@ export default class ChatPresenter extends NERtcCallbackEx {
   }
 
   enableSubAudio(enabled: boolean) {
-    let ret = NERtcSDK.getInstance().enableLocalSubStreamAudio(enabled)
+    let ret: number = NERtcSDK.getInstance().enableLocalSubStreamAudio(enabled)
     console.info(TAG, `enableSubAudio enabled:${ret}`)
     if(ret == NERtcConstants.ErrorCode.NO_ERROR) {
       Prompt.showToast({ message: `本地辅流音频:${enabled?'开':'关'}`})
@@ -820,7 +876,7 @@ export default class ChatPresenter extends NERtcCallbackEx {
   }
 
   muteAudio(mute: boolean) {
-    let ret = NERtcSDK.getInstance().muteLocalAudioStream(mute)
+    let ret: number = NERtcSDK.getInstance().muteLocalAudioStream(mute)
     console.info(TAG, `mute main audio stream mute:${mute}`)
     if(ret == NERtcConstants.ErrorCode.NO_ERROR) {
       Prompt.showToast({ message: `主流音频${mute ? 'Mute':'UnMute'} ret:${ret}`})
@@ -828,7 +884,7 @@ export default class ChatPresenter extends NERtcCallbackEx {
   }
 
   muteSubAudio(mute: boolean) {
-    let ret = NERtcSDK.getInstance().muteLocalSubStreamAudio(mute)
+    let ret: number = NERtcSDK.getInstance().muteLocalSubStreamAudio(mute)
     console.info(TAG, `mute sub audio stream mute:${mute}`)
     if(ret == NERtcConstants.ErrorCode.NO_ERROR) {
       Prompt.showToast({ message: `辅流音频${mute ? 'Mute':'UnMute'} ret:${ret}`})
@@ -836,7 +892,7 @@ export default class ChatPresenter extends NERtcCallbackEx {
   }
 
   publishAudio(enabled: boolean) {
-    let ret = NERtcSDK.getInstance().enableMediaPub(NERtcConstants.NERtcMediaPublishType.kNERtcMediaPublishTypeAudio, enabled)
+    let ret: number = NERtcSDK.getInstance().enableMediaPub(NERtcConstants.NERtcMediaPublishType.kNERtcMediaPublishTypeAudio, enabled)
     console.info(TAG, `pushAudio enabled:${ret}`)
     if(ret == NERtcConstants.ErrorCode.NO_ERROR) {
       Prompt.showToast({ message: `本地音频发布:${enabled ? '开':'关'}`})
@@ -856,7 +912,7 @@ export default class ChatPresenter extends NERtcCallbackEx {
   }
 
   muteLocalAudio(enable: boolean): void {
-    let ret = NERtcSDK.getInstance().muteLocalAudioStream(enable)
+    let ret: number = NERtcSDK.getInstance().muteLocalAudioStream(enable)
     console.info(TAG, `muteLocalAudioStream enabled: ${enable}, ret: ${ret}`)
   }
 
@@ -1040,7 +1096,7 @@ export default class ChatPresenter extends NERtcCallbackEx {
         this.preObserver = new DemoNERtcPreDecodeObserver(predecodeDir)
       }
 
-      let result = NERtcSDK.getInstance().setPreDecodeObserver(this.preObserver);
+      let result: number = NERtcSDK.getInstance().setPreDecodeObserver(this.preObserver);
       if(result == NERtcConstants.ErrorCode.NO_ERROR) {
         Prompt.showToast({ message: '开启前处理回调成功'})
       }
@@ -1050,7 +1106,7 @@ export default class ChatPresenter extends NERtcCallbackEx {
   }
 
   enableEarBack(enabled: boolean) {
-    let ret = NERtcSDK.getInstance().enableEarback(enabled)
+    let ret: number = NERtcSDK.getInstance().enableEarback(enabled)
     console.info(TAG, 'enableEarback ret: ' + ret)
     ret = NERtcSDK.getInstance().setEarbackVolume(100)
     console.info(TAG, 'setEarbackVolume 100, ret: ' + ret)
@@ -1064,7 +1120,7 @@ export default class ChatPresenter extends NERtcCallbackEx {
     }
 
     if(enabled) {
-      let option = new NERtcConstants.NERtcCreateAudioMixingOption
+      let option: NERtcConstants.NERtcCreateAudioMixingOption = new NERtcConstants.NERtcCreateAudioMixingOption
 
       let lastPath: string
       if(gAudioModel.audioMixUrl.trim() != '') {
@@ -1080,12 +1136,12 @@ export default class ChatPresenter extends NERtcCallbackEx {
       option.sendEnabled = gAudioModel.audioMixIsSend
       option.playbackEnabled = gAudioModel.audioMixIsPlay
 
-      let ret = NERtcSDK.getInstance().startAudioMixing(option)
+      let ret: number = NERtcSDK.getInstance().startAudioMixing(option)
       if(ret != NERtcConstants.ErrorCode.NO_ERROR) {
         Prompt.showToast({ message: '播放伴音失败' })
       }
     } else {
-      let ret = NERtcSDK.getInstance().stopAudioMixing()
+      let ret: number = NERtcSDK.getInstance().stopAudioMixing()
       if(ret != NERtcConstants.ErrorCode.NO_ERROR) {
         Prompt.showToast({ message: '停止伴音失败' })
       }
@@ -1093,7 +1149,7 @@ export default class ChatPresenter extends NERtcCallbackEx {
   }
 
   setAudioMixingPitch() {
-    let ret = NERtcSDK.getInstance().setAudioMixingPitch(gAudioModel.audioMixPitch)
+    let ret: number = NERtcSDK.getInstance().setAudioMixingPitch(gAudioModel.audioMixPitch)
     if(ret != NERtcConstants.ErrorCode.NO_ERROR) {
       Prompt.showToast({ message: `设置伴音音调失败':${ret}`})
     }
@@ -1111,22 +1167,22 @@ export default class ChatPresenter extends NERtcCallbackEx {
       const fileName = splits[splits.length - 1]
       const lastPath = getContext().filesDir + "/media/" + fileName
 
-      let option = new NERtcConstants.NERtcCreateAudioEffectOption
+      let option: NERtcConstants.NERtcCreateAudioEffectOption = new NERtcConstants.NERtcCreateAudioEffectOption
       option.path = lastPath
       option.loopCount = gAudioModel.audioEffect1LoopNum
       option.sendEnabled = gAudioModel.audioEffect1IsSend
       option.playbackEnabled = gAudioModel.audioEffect1IsPlay
 
-      let ret = NERtcSDK.getInstance().playEffect(1, option)
+      let ret: number = NERtcSDK.getInstance().playEffect(1, option)
       console.info(TAG, `playEffect id:1, ret:${ret}`)
     } else {
-      let ret = NERtcSDK.getInstance().stopEffect(1)
+      let ret: number = NERtcSDK.getInstance().stopEffect(1)
       console.info(TAG, `stopEffect id:1, ret:${ret}`)
     }
   }
 
   setAudioEffectPitch() {
-    let ret = NERtcSDK.getInstance().setEffectPitch(1, gAudioModel.audioEffect1Pitch)
+    let ret: number = NERtcSDK.getInstance().setEffectPitch(1, gAudioModel.audioEffect1Pitch)
     if(ret != NERtcConstants.ErrorCode.NO_ERROR) {
       Prompt.showToast({ message: `设置音调音调失败':${ret}`})
     }
@@ -1135,7 +1191,7 @@ export default class ChatPresenter extends NERtcCallbackEx {
   enableScreenShare(enable: boolean) {
     if(enable) {
 
-      let profile = NERtcConstants.NERtcVideoProfileType.kNERtcVideoProfileHD1080P
+      let profile: number = NERtcConstants.NERtcVideoProfileType.kNERtcVideoProfileHD1080P
       if(gVideoModel.screenSendResolution == 0) {
         profile = NERtcConstants.NERtcVideoProfileType.kNERtcVideoProfileStandard
       } else if(gVideoModel.screenSendResolution == 1) {
@@ -1144,7 +1200,7 @@ export default class ChatPresenter extends NERtcCallbackEx {
         profile = NERtcConstants.NERtcVideoProfileType.kNERtcVideoProfileHD1080P
       }
 
-      let frameRate = NERtcConstants.NERtcVideoFrameRate.kNERtcVideoFrameRateFps30
+      let frameRate: number = NERtcConstants.NERtcVideoFrameRate.kNERtcVideoFrameRateFps30
       switch (gVideoModel.screenFrameRate) {
         case 0:
           frameRate = NERtcConstants.NERtcVideoFrameRate.kNERtcVideoFrameRateFps7
@@ -1170,7 +1226,7 @@ export default class ChatPresenter extends NERtcCallbackEx {
       if (gVideoModel.screenMode == 1) {
         contentPrefer = NERtcConstants.NERtcSubStreamContentPrefer.kNERtcSubStreamContentPreferDetails;
       }
-      let config = new NERtcConstants.NERtcScreenConfiguration
+      let config: NERtcConstants.NERtcScreenConfiguration = new NERtcConstants.NERtcScreenConfiguration
       config.maxProfile = profile
       config.framerate = frameRate
       config.minFramerate = gVideoModel.screenMinFrameRate
@@ -1178,7 +1234,7 @@ export default class ChatPresenter extends NERtcCallbackEx {
       config.minBitrate = gVideoModel.screenMinBitRate
       config.contentPrefer = contentPrefer;
 
-      let ret = NERtcSDK.getInstance().startScreenCapture(config)
+      let ret: number = NERtcSDK.getInstance().startScreenCapture(config)
       console.info(TAG, `startScreenCapture, ret: ${ret}`)
 
       if(ret == NERtcConstants.ErrorCode.NO_ERROR && this.localUser) {
@@ -1188,7 +1244,7 @@ export default class ChatPresenter extends NERtcCallbackEx {
         });
       }
     } else {
-      let ret = NERtcSDK.getInstance().stopScreenCapture()
+      let ret: number = NERtcSDK.getInstance().stopScreenCapture()
       console.info(TAG, `stopScreenCapture, ret: ${ret}`)
       if(ret == NERtcConstants.ErrorCode.NO_ERROR) {
         if(this.localUser) {
@@ -1202,10 +1258,10 @@ export default class ChatPresenter extends NERtcCallbackEx {
   }
 
   enableSpeakerOn(enabled: boolean ) {
-    let ret = NERtcSDK.getInstance().setSpeakerphoneOn(enabled)
+    let ret: number = NERtcSDK.getInstance().setSpeakerphoneOn(enabled)
     if(ret == NERtcConstants.ErrorCode.NO_ERROR) {
       setTimeout(() => {
-        let on = NERtcSDK.getInstance().isSpeakerphoneOn()
+        let on: boolean = NERtcSDK.getInstance().isSpeakerphoneOn()
         console.info(TAG, 'isSpeakerphoneOn: ' + on)
         Prompt.showToast({ message: `设置扬声器: ${on ? '开': '关'}`})
       }, 500)
@@ -1214,19 +1270,19 @@ export default class ChatPresenter extends NERtcCallbackEx {
 
   enableAudioDump(enabled: boolean) {
 
-    let type = NERtcConstants.NERtcAudioDumpType.kNERtcAudioDumpTypeWAV
+    let type: number = NERtcConstants.NERtcAudioDumpType.kNERtcAudioDumpTypeWAV
     if(gAudioModel) {
       type = gAudioModel.audioDumpType
       console.info(TAG, `audio dump type: ${type}`)
     }
 
     if(enabled) {
-      let ret = NERtcSDK.getInstance().startAudioDumpWithType(type)
+      let ret: number = NERtcSDK.getInstance().startAudioDumpWithType(type)
       if(ret == NERtcConstants.ErrorCode.NO_ERROR) {
         Prompt.showToast({ message: '音频DUMP开启' })
       }
     } else {
-      let ret = NERtcSDK.getInstance().stopAudioDump()
+      let ret: number = NERtcSDK.getInstance().stopAudioDump()
       if(ret == NERtcConstants.ErrorCode.NO_ERROR) {
         Prompt.showToast({ message: '音频Dump关闭' })
       }
@@ -1235,7 +1291,7 @@ export default class ChatPresenter extends NERtcCallbackEx {
 
   startPreview(login: LoginInfo) {
     login_ = login
-    let ret = NERtcSDK.getInstance().startVideoPreview(NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeMain)
+    let ret: number = NERtcSDK.getInstance().startVideoPreview(NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeMain)
     Prompt.showToast({ message: `打开预览:${ret == NERtcConstants.ErrorCode.NO_ERROR ? '成功':'失败'}`})
   }
 
@@ -1247,13 +1303,13 @@ export default class ChatPresenter extends NERtcCallbackEx {
       console.info(TAG, `path: ` + path)
       if(user.local) {
         NERtcSDK.getInstance().takeLocalSnapshot(user.userCheckIsMainStream() ? NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeMain : NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeSub, {
-          onTakeSnapshotResult: (errorCode, image_) => {
+          onTakeSnapshotResult: (errorCode: number, image_?: PixelMap | undefined) => {
             this.saveSnapshotEncapsulation(errorCode, image_, path);
           }
         })
       } else {
         NERtcSDK.getInstance().takeRemoteSnapshot(user.uid, user.userCheckIsMainStream() ? NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeMain : NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeSub, {
-          onTakeSnapshotResult: (errorCode, image_) => {
+          onTakeSnapshotResult: (errorCode: number, image_?: PixelMap | undefined) => {
             this.saveSnapshotEncapsulation(errorCode, image_, path)
           }
         })
@@ -1281,7 +1337,7 @@ export default class ChatPresenter extends NERtcCallbackEx {
 
   changeCanvasStyle(user: DemoUser): void {
 
-    let mirrorMode = user.getCanvasMirror() ? NERtcConstants.NERtcVideoMirrorMode.kNERtcVideoMirrorModeEnabled :
+    let mirrorMode: number = user.getCanvasMirror() ? NERtcConstants.NERtcVideoMirrorMode.kNERtcVideoMirrorModeEnabled :
       NERtcConstants.NERtcVideoMirrorMode.kNERtcVideoMirrorModeDisabled
     let scaleMode = user.getScaleMode()
 
@@ -1302,7 +1358,7 @@ export default class ChatPresenter extends NERtcCallbackEx {
 
 
   subscribeAllAudio(enabled: boolean): void {
-    let ret = NERtcSDK.getInstance().subscribeAllRemoteAudioStreams(enabled)
+    let ret: number = NERtcSDK.getInstance().subscribeAllRemoteAudioStreams(enabled)
     if(ret == NERtcConstants.ErrorCode.NO_ERROR) {
       Prompt.showToast({ message: `${enabled?'订阅':'取消订阅'}所有用户音频成功`})
     }
@@ -1317,7 +1373,7 @@ export default class ChatPresenter extends NERtcCallbackEx {
       vad = gAudioModel.captureVolumeVAD
     }
 
-    let ret = NERtcSDK.getInstance().enableAudioVolumeIndication(enabled, BigInt(volumeDuration), vad)
+    let ret: number = NERtcSDK.getInstance().enableAudioVolumeIndication(enabled, BigInt(volumeDuration), vad)
     if(ret == NERtcConstants.ErrorCode.NO_ERROR) {
       Prompt.showToast({ message: `实时音量${enabled?'开启':'关闭'}成功`})
     }
@@ -1339,7 +1395,7 @@ export default class ChatPresenter extends NERtcCallbackEx {
       let inputFile = gAudioModel.externalAudioInputUrl.split("/")
       let fileName = inputFile[inputFile.length - 1]
 
-      let type = NERtcConstants.NERtcAudioStreamType.kNERtcAudioStreamTypeMain
+      let type: number = NERtcConstants.NERtcAudioStreamType.kNERtcAudioStreamTypeMain
       if(!this.externalAudioSourceMain) {
         this.externalAudioSourceMain = new ExternalPcmSource(Product.RTC_DEMO, type, fileName, gAudioModel.externalAudioInputSampleRate, gAudioModel.externalAudioInputChannelNum)
       }
@@ -1396,7 +1452,7 @@ export default class ChatPresenter extends NERtcCallbackEx {
       let inputFile = gAudioModel.externalSubAudioInputUrl.split("/")
       let fileName = inputFile[inputFile.length - 1]
 
-      let type = NERtcConstants.NERtcAudioStreamType.kNERtcAudioStreamTypeSub
+      let type: number = NERtcConstants.NERtcAudioStreamType.kNERtcAudioStreamTypeSub
       if(!this.externalAudioSourceSub) {
         this.externalAudioSourceSub = new ExternalPcmSource(Product.RTC_DEMO, type, fileName, gAudioModel.externalSubAudioInputSampleRate, gAudioModel.externalSubAudioInputChannelNum)
       }
@@ -1569,7 +1625,7 @@ export default class ChatPresenter extends NERtcCallbackEx {
       }
     } else if(stream == 1) { //video
       if(type == 0) {
-        let subType = (dual == 0) ? NERtcConstants.NERtcRemoteVideoSubscribeType.kNERtcRemoteVideoSubscribeTypeHigh:NERtcConstants.NERtcRemoteVideoSubscribeType.kNERtcRemoteVideoSubscribeTypeLow
+        let subType: number = (dual == 0) ? NERtcConstants.NERtcRemoteVideoSubscribeType.kNERtcRemoteVideoSubscribeTypeHigh:NERtcConstants.NERtcRemoteVideoSubscribeType.kNERtcRemoteVideoSubscribeTypeLow
         NERtcSDK.getInstance().subscribeRemoteVideo(uid, subscribe, subType)
       } else {
         NERtcSDK.getInstance().subscribeRemoteSubStreamVideo(uid, subscribe)
@@ -1578,23 +1634,24 @@ export default class ChatPresenter extends NERtcCallbackEx {
   }
 
   switchCamera() {
-    let ret = NERtcSDK.getInstance().switchCamera()
+    let ret: number = NERtcSDK.getInstance().switchCamera()
     Prompt.showToast({ message: `切换摄像头:${ret == NERtcConstants.ErrorCode.NO_ERROR ? '成功':'失败'}`})
   }
 
   enableAudioFrameObserver(enable: boolean): void {
 
     if(gAudioModel) {
-      let format = new NERtcConstants.NERtcAudioFrameRequestFormat
+      let format: NERtcConstants.NERtcAudioFrameRequestFormat = new NERtcConstants.NERtcAudioFrameRequestFormat
       format.channels = gAudioModel.audioCallbackChannel
       format.sampleRate = gAudioModel.audioCallbackSampleRate
       format.opMode = gAudioModel.audioCallbackReadOnly ? NERtcConstants.NERtcAudioFrameOpMode.kNERtcAudioFrameOpModeReadOnly : NERtcConstants.NERtcAudioFrameOpMode.kNERtcAudioFrameOpModeReadWrite
       NERtcSDK.getInstance().setMixedAudioFrameParameters(format)
       NERtcSDK.getInstance().setPlaybackAudioFrameParameters(format)
       NERtcSDK.getInstance().setRecordingAudioFrameParameters(format)
+      NERtcSDK.getInstance().setPlaybackBeforeMixingAudioFrameParameters(format)
     }
 
-    let result = NERtcConstants.ErrorCode.NO_ERROR;
+    let result: number = NERtcConstants.ErrorCode.NO_ERROR;
     if (enable) {
       this.audioFrameObserver.setFileDir(this.dir!);
       result = NERtcSDK.getInstance().setAudioFrameObserver(this.audioFrameObserver);
@@ -1610,7 +1667,7 @@ export default class ChatPresenter extends NERtcCallbackEx {
   }
 
   enableVideoFrameObserver(enable: boolean): void {
-    let result = NERtcConstants.ErrorCode.NO_ERROR;
+    let result: number = NERtcConstants.ErrorCode.NO_ERROR;
     if (enable) {
       this.videoFrameObserver.setFileDir(this.dir!);
       result = NERtcSDK.getInstance().setVideoFrameObserver(this.videoFrameObserver);
@@ -1631,9 +1688,9 @@ export default class ChatPresenter extends NERtcCallbackEx {
    * @param whiteList
    */
   setBlackWhiteList(blackList: BigUint64Array|null, pubWhiteList: BigUint64Array|null, subWhiteList: BigUint64Array|null) {
-    let setBlackListRet = NERtcSDK.getInstance().setSubscribeAudioBlacklist(blackList, NERtcConstants.NERtcAudioStreamType.kNERtcAudioStreamTypeMain)
-    let setPubWhiteListRet = NERtcSDK.getInstance().setSubscribeAudioWhitelist(pubWhiteList)
-    let setSubWhiteListRet = NERtcSDK.getInstance().setAudioSubscribeOnlyBy(subWhiteList)
+    let setBlackListRet: number = NERtcSDK.getInstance().setSubscribeAudioBlacklist(blackList, NERtcConstants.NERtcAudioStreamType.kNERtcAudioStreamTypeMain)
+    let setPubWhiteListRet: number = NERtcSDK.getInstance().setSubscribeAudioWhitelist(pubWhiteList)
+    let setSubWhiteListRet: number = NERtcSDK.getInstance().setAudioSubscribeOnlyBy(subWhiteList)
     Prompt.showToast({ message:
     `设置黑名单列表:${ blackList ? [...blackList] : 'null'}, 设置结果:${setBlackListRet} \n
      设置上行白名单列表:${ pubWhiteList ? [...pubWhiteList] : 'null'}, 设置结果:${setPubWhiteListRet} \n
@@ -1642,7 +1699,7 @@ export default class ChatPresenter extends NERtcCallbackEx {
 
   enableLastMileProbe(enabled: boolean): number {
 
-    let ret = NERtcConstants.ErrorCode.NO_ERROR
+    let ret: number = NERtcConstants.ErrorCode.NO_ERROR
     if(enabled) {
       let upBitRate = gOtherModel.upLinkBitRate
       let downBitRate = gOtherModel.downLinkBitRate

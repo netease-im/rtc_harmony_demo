@@ -1,4 +1,4 @@
-import { NERtcConstants } from 'sdk'
+import { NERtcConstants } from '@nertc/nertc_sdk'
 import ChatPresenter from '../../chat/Presenter1'
 
 @CustomDialog

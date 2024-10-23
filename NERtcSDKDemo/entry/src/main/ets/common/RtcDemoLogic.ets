@@ -1,5 +1,5 @@
 // RtcDemoLogic + RtcDemoCallback 用于 sendable 对象与非 sendable 对象的交互
-import { NERtcConstants } from 'sdk'
+import { NERtcConstants } from '@nertc/nertc_sdk'
 
 export interface IRtcDemoLogicDelegate {
   onJoinChannel: (result: number, channelId: bigint, elapsed: bigint, uid: bigint) => void;

@@ -1,5 +1,5 @@
 import fs from '@ohos.file.fs';
-import { NERtcConstants, NERtcSDK } from 'sdk/Index';
+import { NERtcConstants, NERtcSDK } from '@nertc/nertc_sdk';
 import * as common from '../model/common'
 
 enum NaluType {

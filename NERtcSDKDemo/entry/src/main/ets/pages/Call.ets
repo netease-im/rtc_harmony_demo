@@ -1,15 +1,14 @@
 import router from '@ohos.router';
 import { ChatResult, LoginInfo } from './chat/ChatModel'
 import * as model from './chat/ChatModel'
-import { NERtcVideoView } from 'sdk';
+import { NERtcVideoView } from '@nertc/nertc_sdk';
 import  ChatPresenter  from './chat/Presenter1';
 import DemoUser from '../model/DemoUser';
 import ChatNotify, { OPERATOR } from './chat/Delegate';
 import Prompt from '@system.prompt';
 import common from '@ohos.app.ability.common';
 
-import { NERtcCallbackEx, NERtcConstants, NERtcSDK, NERtcCallback} from 'sdk/Index';
-
+import { NERtcConstants, NERtcSDK} from '@nertc/nertc_sdk/Index';
 
 class MyDataSource implements IDataSource {
   private list: number[] = []
@@ -32,6 +31,7 @@ class MyDataSource implements IDataSource {
   unregisterDataChangeListener() {
   }
 }
+
 
 @Entry
 @Component
@@ -59,6 +59,7 @@ struct Call {
   private swiperController: SwiperController = new SwiperController()
   private data: MyDataSource = new MyDataSource([])
 
+
   aboutToAppear(): void {
     let list: number[] = []
     for (let i = 1; i <= 2; i++) {
@@ -66,6 +67,7 @@ struct Call {
     }
     this.data = new MyDataSource(list)
   }
+
 
   uiDelegate: ChatNotify = {
 
@@ -199,6 +201,7 @@ struct Call {
                       NERtcVideoView({
                         canvasId: this.users[0].xComponentIdMain,
                         onLoad: (() => {
+                          console.info(this.TAG, `item:${item}`)
                           console.info(this.TAG, `User:${this.login?.uid} surface create.`)
                           let user = this.users.find(user => user.uid == BigInt(this.login?.uid ?? "0"))
                           if(user) this.chat?.attach(user)

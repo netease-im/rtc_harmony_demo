@@ -1,5 +1,5 @@
 import worker, { ThreadWorkerGlobalScope, MessageEvents, ErrorEvent } from '@ohos.worker';
-import { NERtcCallbackEx, NERtcConstants, NERtcSDK } from 'sdk';
+import { NERtcCallbackEx, NERtcConstants, NERtcSDK } from '@nertc/nertc_sdk';
 import { Init, Join, NERtcData, Response, SetUp, SetUpResponse, API, CallbackResponse, EnableVideo } from './ChatModel'
 
 const TAG: string = 'ChatWorker'
