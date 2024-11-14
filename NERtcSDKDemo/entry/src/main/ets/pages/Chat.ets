@@ -125,6 +125,7 @@ struct Chat {
   }
 
   aboutToAppear(): void {
+    ChatPresenter.getInstance().setDelegate(this.uiDelegate)
     console.info(this.TAG, '=== aboutToAppear ===')
     let login = router.getParams() as LoginInfo
     this.title += login?.cname ?? ""
@@ -137,7 +138,6 @@ struct Chat {
   }
 
   onPageShow() {
-    ChatPresenter.getInstance().setDelegate(this.uiDelegate)
     if(this.pendingResetParams) {
       Prompt.showToast({ message: '重置参数'})
       this.pendingResetParams = false

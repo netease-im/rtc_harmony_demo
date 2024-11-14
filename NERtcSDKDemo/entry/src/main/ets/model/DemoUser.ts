@@ -53,7 +53,7 @@ export default class DemoUser {
    */
   changeScaleModeLoop(): DemoUser {
     this.scaleMode ++
-    this.scaleMode = this.scaleMode % 3
+    this.scaleMode = this.scaleMode % 2
     return this
   }
 

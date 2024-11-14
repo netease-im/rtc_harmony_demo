@@ -73,7 +73,7 @@
 ```json5
   "dependencies": {
     //openharmony仓库集成
-    "@nertc/nertc_sdk": "1.2.1-beta"
+    "@nertc/nertc_sdk": "1.5.0-beta"
   }
 ```
 

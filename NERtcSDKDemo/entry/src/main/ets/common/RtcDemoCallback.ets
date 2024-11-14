@@ -135,12 +135,14 @@ export class RtcDemoAudioFrameObserver implements NERtcAudioFrameObserver {
   private file_info_local_record_sub: RtcDemoFileInfo|null = null;
   private file_info_map_remote_user_before_mixing_sub: collections.Map<string, RtcDemoFileInfo>|null = null;
   private file_dir: string = "";
+  private stopped: boolean = false;
 
   constructor(tag: string) {
     this.tag = this.tag + "_" + tag;
   }
 
   public clearUp(): void {
+    this.stopped = true;
     this.file_dir = "";
 
     if (this.file_info_map_remote_user_before_mixing) {
@@ -177,6 +179,7 @@ export class RtcDemoAudioFrameObserver implements NERtcAudioFrameObserver {
 
   public setFileDir(fileDir: string): void {
     this.file_dir = fileDir + "/AudioFrameObserver";
+    this.stopped = false;
   }
 
   private generateFileName(type: string, frame: NERtcConstants.NERtcAudioFrame): string {
@@ -198,6 +201,7 @@ export class RtcDemoAudioFrameObserver implements NERtcAudioFrameObserver {
   }
 
   onRecordedFrame(frame: NERtcConstants.NERtcAudioFrame): void {
+    if(this.stopped) return;
     if (frame.format == null || frame.data == null) {
       return;
     }
@@ -219,6 +223,7 @@ export class RtcDemoAudioFrameObserver implements NERtcAudioFrameObserver {
   }
 
   onPlaybackFrame(frame: NERtcConstants.NERtcAudioFrame): void {
+    if(this.stopped) return;
     if (frame.format == null || frame.data == null) {
       return;
     }
@@ -235,6 +240,7 @@ export class RtcDemoAudioFrameObserver implements NERtcAudioFrameObserver {
   }
 
   onMixedFrame(frame: NERtcConstants.NERtcAudioFrame): void {
+    if(this.stopped) return;
     if (frame.format == null || frame.data == null) {
       return;
     }
@@ -251,6 +257,7 @@ export class RtcDemoAudioFrameObserver implements NERtcAudioFrameObserver {
   }
 
   onUserPlaybackFrameBeforeMixing(channelId: bigint, uid: bigint, frame: NERtcConstants.NERtcAudioFrame): void {
+    if(this.stopped) return;
     if (frame.format == null || frame.data == null) {
       return;
     }
@@ -278,6 +285,7 @@ export class RtcDemoAudioFrameObserver implements NERtcAudioFrameObserver {
   }
 
   onRecordedSubStreamFrame(frame: NERtcConstants.NERtcAudioFrame): void {
+    if(this.stopped) return;
     if (frame.format == null || frame.data == null) {
       return;
     }
@@ -294,6 +302,7 @@ export class RtcDemoAudioFrameObserver implements NERtcAudioFrameObserver {
   }
 
   onUserPlaybackSubStreamFrameBeforeMixing(channelId: bigint, uid: bigint, frame: NERtcConstants.NERtcAudioFrame): void {
+    if(this.stopped) return;
     if (frame.format == null || frame.data == null) {
       return;
     }

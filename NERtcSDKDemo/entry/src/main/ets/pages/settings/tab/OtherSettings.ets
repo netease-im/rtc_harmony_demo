@@ -3,6 +3,7 @@ import { Prompt } from '@kit.ArkUI'
 import { OtherModel } from '../model/common'
 import { NetEaseListLogicDialog } from '../view/NetEaseListLogicDialog'
 import { NetEaseInputLogicDialog } from '../view/NetEaseInputLogicDialog'
+import { NetEaseTextInputDialog } from '../../../ui/TextInputDialog'
 
 @Component
 export struct OtherSetting {
@@ -31,6 +32,37 @@ export struct OtherSetting {
       List({ space: 10 }) {
 
         ListItemGroup({ header: this.itemHead('通用')}) {
+
+          ComposeListItem({
+            contentItem: {
+              primaryText: '开启字幕'
+            },
+            operateItem: {
+              switch: {
+                isCheck: this.otherModel.captionMode,
+                onChange: value => {
+                  this.otherModel.captionMode = value
+                  Prompt.showToast({ message: `字幕状态: ${value}`})
+                }
+              }
+            }
+          })
+
+          NetEaseInputLogicDialog({
+            title: '字幕源语言',
+            content: String(this.otherModel.captionSource ?? ''),
+            onInputValue: value => {
+              this.otherModel.captionSource = value
+            }
+          }).visibility(this.isHiddenInMeeting())
+
+          NetEaseInputLogicDialog({
+            title: '字幕目标语言',
+            content: String(this.otherModel.captionDest ?? ''),
+            onInputValue: value => {
+              this.otherModel.captionDest = value
+            }
+          }).visibility(this.isHiddenInMeeting())
 
           ComposeListItem({
             contentItem: {
@@ -71,6 +103,16 @@ export struct OtherSetting {
             index: this.otherModel.downFallbackOption,
             choose: index => {
               this.otherModel.downFallbackOption = index
+            }
+          }).visibility(this.isHiddenInMeeting())
+
+          NetEaseInputLogicDialog({
+            title: '画布圆角',
+            content: String(this.otherModel.canvasBorderRadius ?? '0'),
+            onInputValue: value => {
+              if(Number.parseInt(value) != Number.NaN) {
+                this.otherModel.canvasBorderRadius = Number.parseInt(value)
+              }
             }
           }).visibility(this.isHiddenInMeeting())
 

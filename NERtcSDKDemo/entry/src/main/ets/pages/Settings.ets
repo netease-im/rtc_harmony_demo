@@ -54,8 +54,9 @@ struct Settings {
       }
     })
 
+    const baseDir = getContext(this).filesDir
+    parcelable.Operate(this, FUNC.COPY, this.videoModel.virtualBackgroundSource, baseDir)
     setTimeout(() => {
-      const baseDir = getContext(this).filesDir
       parcelable.Operate(this, FUNC.COPY, this.audioModel.audioEffect1Url, baseDir)
       parcelable.Operate(this, FUNC.COPY, this.audioModel.audioMixPath, baseDir)
       parcelable.Operate(this, FUNC.COPY, this.audioModel.externalAudioInputUrl, baseDir)

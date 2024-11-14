@@ -1,5 +1,6 @@
 import { NERtcVideoView } from '@nertc/nertc_sdk'
 import { SelectDialog } from '@kit.ArkUI';
+import Logic from '../Presenter1';
 
 @Component
 export struct RTCDemoView {
@@ -55,19 +56,20 @@ export struct RTCDemoView {
   }
 
   build() {
-    NERtcVideoView({
-      canvasId: this.rtcViewId,
-      onLoad: (() => {
-        if(this.attach) {
-          this.attach()
-        }
-      }),
-      onDestroy: (() => {
-        console.info(this.TAG, `id:${this.rtcViewId} surface release.`)
-      })
-    }).gesture(LongPressGesture({repeat: false})
-      .onAction(() => {
-        this.canvasLongPressDialog?.open()
-      }))
+      NERtcVideoView({
+        canvasId: this.rtcViewId,
+        radius: Logic.getInstance().GetCanvasBorderRadius(),
+        onLoad: (() => {
+          if(this.attach) {
+            this.attach()
+          }
+        }),
+        onDestroy: (() => {
+          console.info(this.TAG, `id:${this.rtcViewId} surface release.`)
+        })
+      }).gesture(LongPressGesture({repeat: false})
+        .onAction(() => {
+          this.canvasLongPressDialog?.open()
+        }))
   }
 }

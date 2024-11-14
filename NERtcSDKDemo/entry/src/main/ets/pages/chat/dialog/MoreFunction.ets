@@ -5,6 +5,9 @@ import { SubDetailDialog } from './SubDetailDialog';
 import { UI } from '../ChatModel';
 import { WhiteBlackListDialog } from './WhiteBlackListDialog';
 import Handle from '../../../common/Handle'
+import { OtherModel } from '../../settings/model/common';
+
+export let gOtherModel: OtherModel
 
 @Component
 export struct MoreFunction {
@@ -43,6 +46,13 @@ export struct MoreFunction {
   @State audioFrameObserverEnable: boolean = false; //音频数据回调
   @State videoFrameObserverEnable: boolean = false; //视频数据回调
   @State subscribeAllAudio: boolean = false //订阅/取消订阅所有用户音频
+  @State enableAudioLoopBack: boolean = false //打开/关闭音频共享
+
+  @State micMute: boolean = false //麦克风静音
+  @State playoutDeviceMute: boolean = false //设置播放设备静音
+  @State setRole: boolean = false //是否设置成观众
+
+  @State captionMode: boolean = false
 
   @State qosCallbackEnable: boolean = false //qos callback 回调
   @State preDecodeCallbackEnable: boolean = false //predecode callback 回调
@@ -249,6 +259,26 @@ export struct MoreFunction {
           }).width('100%').height(50).fontSize(15).borderRadius(10)
         }
 
+        GridItem() {
+          Button(!this.enableAudioLoopBack ? '打开音频共享':'关闭音频共享', { type: ButtonType.Normal, stateEffect: true }).onClick(() => {
+            ChatPresenter.getInstance().enableLoopBack(!this.enableAudioLoopBack)
+            this.enableAudioLoopBack = !this.enableAudioLoopBack
+          }).width('100%').height(50).fontSize(15).borderRadius(10)
+        }
+
+        GridItem() {
+          Button(!this.micMute ? '麦克风静音':'取消静音', { type: ButtonType.Normal, stateEffect: true}).onClick(() => {
+            ChatPresenter.getInstance().setMicMute(!this.micMute)
+            this.micMute = !this.micMute
+          }).width('100%').height(50).fontSize(15).borderRadius(10)
+        }
+
+        GridItem() {
+          Button(!this.playoutDeviceMute ? '播放设备静音':'取消静音', { type: ButtonType.Normal, stateEffect: true}).onClick(() => {
+            ChatPresenter.getInstance().setPlayoutDeviceMute(!this.playoutDeviceMute)
+            this.playoutDeviceMute = !this.playoutDeviceMute
+          }).width('100%').height(50).fontSize(15).borderRadius(10)
+        }
       }
 
       if(this.uiType == UI.VIDEO) {
@@ -383,12 +413,25 @@ export struct MoreFunction {
 
         GridItem() {
           Button('自定义上报', { type: ButtonType.Normal, stateEffect: true }).onClick(() => {
-            // ChatPresenter.getInstance().reportCustomEvent()
-            // Prompt.showToast({ message: '自定义上报成功，请查看qs'})
-            let rel = Handle.getInstance().syncGet()
-            console.info('Handle', 'rel: ' + rel)
+            ChatPresenter.getInstance().reportCustomEvent()
+            Prompt.showToast({ message: '自定义上报成功，请查看qs'})
           }).width('100%').height(50).fontSize(15).borderRadius(10)
         }
+
+        GridItem() {
+          Button(!this.setRole ? '设置观众':'设置主播', { type: ButtonType.Normal, stateEffect: true}).onClick(() => {
+            ChatPresenter.getInstance().setClientRole(!this.setRole)
+            this.setRole = !this.setRole
+          }).width('100%').height(50).fontSize(15).borderRadius(10)
+        }
+
+        GridItem() {
+          Button(!this.captionMode ? '开启字幕':'关闭字幕', {type: ButtonType.Normal, stateEffect: true}).onClick(() => {
+            ChatPresenter.getInstance().triggerCaptionMode(!this.captionMode)
+            this.captionMode = !this.captionMode
+          }).width('100%').height(50).fontSize(15).borderRadius(10)
+        }
+
       }
     }.width('100%').height(250).columnsTemplate('1fr 1fr 1fr').backgroundColor(Color.Grey).columnsGap(5).rowsGap(5).padding(5)
   }

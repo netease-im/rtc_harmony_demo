@@ -140,6 +140,12 @@ struct Home {
       this.copyAssets(dir, 'input_48k_ch2.opus')
       this.copyAssets(dir, 'test.h264')
       this.copyAssets(dir, 'output.h264')
+
+      for (let i = 0; i < 6; i++) {
+        let file_name = "image_vb_sample_" + i + ".jpg";
+        this.copyVirtualBackgroundResources(dir, file_name);
+      }
+
     } catch (e) {
       console.info(this.TAG, 'copy asserts failed.')
     }
@@ -162,6 +168,30 @@ struct Home {
       }
     } catch (e) {
       console.error(this.TAG, 'copy assets file failed, message: ' + JSON.stringify(e))
+    }
+  }
+
+  private copyVirtualBackgroundResources(folder_path: string, file_name: string): void {
+    try {
+      let file_ready = false;
+      let file_path: string = folder_path + "/" + file_name;
+      console.info(this.TAG, `will begin copy file, folder_path:${folder_path}, file_name:${file_name}`);
+      if (fs.accessSync(file_path)) {
+        console.info(this.TAG, 'file: ' + file_name + ", is already exists, path: " + file_path);
+        file_ready = true;
+      }
+
+      if (!file_ready) {
+        let vb_file_path: string = "vb/" + file_name;
+        getContext(this).resourceManager.getRawFileContent(vb_file_path).then(data => {
+          let writeLen = fs.createStreamSync(file_path, 'w').writeSync(data.buffer);
+          console.info(this.TAG, `write file:${file_name}, len:${writeLen}`);
+        }).catch((err: BusinessError) => {
+          console.error(this.TAG, `write file failed, err:${err.message}, code:${err.code}`);
+        });
+      }
+    } catch (e) {
+      console.error(this.TAG, 'copy assets file failed, message: ' + JSON.stringify(e));
     }
   }
 

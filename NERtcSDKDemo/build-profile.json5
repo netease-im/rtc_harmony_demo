@@ -6,9 +6,9 @@
         "type": "HarmonyOS",
         "material": {
           "certpath": "/Users/yanghui/.ohos/config/default_NERtcSDKDemo_fC4X2KBaSsegelMsDG7dURDErenAy5xkkPJWnu7cV_U=.cer",
-          "storePassword": "0000001B400803AA044ADEAA338C116E9AEB6CB9F5AEAAF2B1D9CCA4E5855839650A05A75668CA8FC353EE",
+          "storePassword": "0000001B6678B256D95538729DE82529304A667E49218DE7EFAAAE9358BBDC004A39A0BF44BBE1C1533940",
           "keyAlias": "debugKey",
-          "keyPassword": "0000001B4FD8A79513BBF0392CFB5BEDF48DA6A7899347742B4ABF384C3BCAC21B82F02B73EB0FB5890EC0",
+          "keyPassword": "0000001B0704F2083070C31B30345633C1AF42B3DCB5A662BDD6DDB5FFEDCFBB734500DE6F6CF8FF896FFE",
           "profile": "/Users/yanghui/.ohos/config/default_NERtcSDKDemo_fC4X2KBaSsegelMsDG7dURDErenAy5xkkPJWnu7cV_U=.p7b",
           "signAlg": "SHA256withECDSA",
           "storeFile": "/Users/yanghui/.ohos/config/default_NERtcSDKDemo_fC4X2KBaSsegelMsDG7dURDErenAy5xkkPJWnu7cV_U=.p12"

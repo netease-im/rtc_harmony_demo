@@ -10,6 +10,6 @@
     //集成线下包
     "@nertc/nertc_sdk": "file:libs/nertc_sdk.har",
     //openharmony仓库集成
-    //"@nertc/nertc_sdk": "1.4.0-beta"
+    //"@nertc/nertc_sdk": "1.5.0-beta"
   }
 }

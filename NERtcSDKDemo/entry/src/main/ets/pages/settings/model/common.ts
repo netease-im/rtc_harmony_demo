@@ -105,15 +105,27 @@ export class VideoModel {
   externalSubVideoHeight: number = 0
   externalSubVideoFrameRate: number = 0
   externalSubVideoRotation: number = 0
+
+  //虚拟背景
+  virtualBackgroundEnable: boolean = false
+  virtualBackgroundType: number = 1
+  virtualBackgroundBlurDegree: number = 3
+  virtualBackgroundColor: number = 0xffffff
+  virtualBackgroundSource: string = ''
+  virtualBackgroundSourceIndex: number = 1
 }
 
 export class OtherModel {
 
   //通用
+  captionMode: boolean = false
+  captionSource: string = 'CH'
+  captionDest: string = ''
   chatDetail: boolean = true
   upFallbackOption: number = 0
   downFallbackOption: number = 0
   channelProfile: number = 0
+  canvasBorderRadius: number = 0
 
   //网络测速
   upLinkBitRate: number = 5000000 //本端期望的最高发送码率

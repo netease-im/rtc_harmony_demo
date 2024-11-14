@@ -5,7 +5,8 @@ import { BusinessError } from '@kit.BasicServicesKit';
 import { VideoModel } from '../model/common';
 import { NetEaseListLogicDialog } from '../view/NetEaseListLogicDialog';
 import { NetEaseInputLogicDialog } from '../view/NetEaseInputLogicDialog';
-
+import fs from '@ohos.file.fs';
+import { FileUtil } from '../../../common/FileUtil';
 @Component
 export struct VideoSetting {
 
@@ -25,6 +26,9 @@ export struct VideoSetting {
   private externalVideoTypeArray: string[] = ['YUV420文件', 'NV21文件', 'MP4文件']
   private videoSendMirrorArray: string[] = ['0 Default', '1 Mirror', '2 Disabled']
   private publishVideoStreamType: string[] = ['None', 'High', 'Low', 'ALL']
+  private virtualBackgroundTypeArray: string[] = ['颜色', '图片', '雾化']
+  private virtualBackgroundBlurDegreeArray: string[] = ['Low', 'Medium', 'High']
+  private virtualBackgroundSourceArray: string[] = ['自选文件', '图片1', '图片2', '图片3', '图片4', '图片5', '图片6']
 
   private isHiddenInMeeting(): Visibility {
     return this.isInMeeting ? Visibility.None : Visibility.Visible;
@@ -532,6 +536,87 @@ export struct VideoSetting {
               }
             }
           })
+        }.divider({
+          strokeWidth: 1,
+          startMargin: 10,
+          endMargin: 10,
+          color: '#F1F3F5'
+        })
+
+        ListItemGroup({ header: this.itemHead('虚拟背景')}) {
+
+          ComposeListItem({
+            contentItem: {
+              primaryText: '虚拟背景',
+            },
+            operateItem: {
+              switch: {
+                isCheck: this.videoModel.virtualBackgroundEnable,
+                onChange: value => {
+                  this.videoModel.virtualBackgroundEnable = value
+                  Prompt.showToast({ message: value ? '打开虚拟背景': '关闭虚拟背景'})
+                }
+              }
+            }
+          })
+
+          NetEaseListLogicDialog({
+            array: this.virtualBackgroundTypeArray,
+            title: '虚拟背景类型',
+            index: this.videoModel.virtualBackgroundType-1,
+            choose: index => {
+              this.videoModel.virtualBackgroundType = index+1
+            }
+          })
+
+          NetEaseListLogicDialog({
+            array: this.virtualBackgroundBlurDegreeArray,
+            title: '雾化级别',
+            index: this.videoModel.virtualBackgroundBlurDegree-1,
+            choose: index => {
+              this.videoModel.virtualBackgroundBlurDegree = index+1
+            }
+          })
+
+          NetEaseInputLogicDialog({
+            title: 'Color',
+            content: String(this.videoModel.virtualBackgroundColor),
+            onInputValue: value => {
+              if(Number.parseInt(value) != Number.NaN) {
+                this.videoModel.virtualBackgroundColor = Number.parseInt(value)
+              } else {
+                Prompt.showToast({ message: 'please input color.' })
+              }
+            }
+          })
+
+
+          NetEaseListLogicDialog({
+            array: this.virtualBackgroundSourceArray,
+            title: '图片',
+            index: this.videoModel.virtualBackgroundSourceIndex,
+            choose: index => {
+              this.videoModel.virtualBackgroundSourceIndex = index
+            }
+          })
+
+          ComposeListItem({
+            contentItem: {
+              primaryText: '请选择自定义图片',
+              secondaryText: this.videoModel.virtualBackgroundSource
+            }
+          }).onClick(() => {
+            const sourceSelectOptions = new picker.DocumentSelectOptions
+            const sourcePicker = new picker.DocumentViewPicker
+            sourcePicker.select(sourceSelectOptions).then(result => {
+              let URI = result[0]
+              console.info(this.TAG, 'picker select to file URI: ' + URI)
+              this.videoModel.virtualBackgroundSource = URI
+            }).catch((err: BusinessError) => {
+              console.error(this.TAG, `Invoke sourcePicker select failed, code:${err.code}, message:${err.message}`)
+            })
+          })
+
         }.divider({
           strokeWidth: 1,
           startMargin: 10,

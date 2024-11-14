@@ -1,4 +1,4 @@
-import { NERtcConstants, NERtcSDK, NERtcCallbackEx} from '@nertc/nertc_sdk';
+import { NERtcConstants, NERtcSDK, NERtcCallbackEx} from '@nertc/nertc_sdk/Index';
 
 import { NERtcPacketObserver} from '@nertc/nertc_sdk';
 import Config from '../../common/Config';
@@ -183,13 +183,21 @@ export default class ChatPresenter extends NERtcCallbackEx {
       }
     })
   }
-
+  onLabFeatureCallback(key: string, param: Object): void {
+  }
   onLastmileQuality(quality: number): void {
     delegates_?.forEach(delegate_ => {
       if(delegate_.networkQuality) {
         delegate_.networkQuality(quality, null)
       }
     })
+  }
+
+  onVirtualBackgroundSourceEnabled(enabled: boolean, reason: number): void {
+    console.info(TAG, `onVirtualBackgroundSourceEnabled, enabled:${enabled}, reason:${reason}`);
+    Prompt.showToast({
+      message: `onVirtualBackgroundSourceEnabled, enabled:${enabled}, reason:${reason}` , duration: 3000
+    });
   }
 
   static getInstance(): ChatPresenter {
@@ -265,7 +273,7 @@ export default class ChatPresenter extends NERtcCallbackEx {
       // 添加需要被拉起应用的bundleName和abilityName
       wants: [
         {
-          bundleName: "com.netease.lava.nertc.demo",
+          bundleName: "com.netease.rtcdemo",
           abilityName: "EntryAbility"
         }
       ],
@@ -329,11 +337,18 @@ export default class ChatPresenter extends NERtcCallbackEx {
       gAudioEffectModel = new AudioEffectModel()
     }
   }
+  triggerCaptionMode(captionMode: boolean) {
+    let param: object = new Object();
+    param["sdk.enable.asr.caption"] = captionMode
+    param["sdk.asr.caption.src.language"] = gOtherModel.captionSource
+    param["sdk.asr.caption.dst.language"] = gOtherModel.captionDest
+    NERtcSDK.getInstance().setParameters(param)
 
+    param["sdk.private.api.request.asr.caption"] = ''
+    NERtcSDK.getInstance().setParameters(param)
+  }
   private before = (): void => {
     let param: object = new Object();
-    //云信内部使用字段，开发者不要使用。可申请两个appkey，一个作为生产环境，一个作为正式环境。
-    param["sdk.enable.debug.environment"] = true;
     //设置SDK日志是否加密，调试阶段关闭，上线阶段打开
     param["sdk.enable.encrypt.log"] = false;
     if(gAudioModel) {
@@ -363,6 +378,11 @@ export default class ChatPresenter extends NERtcCallbackEx {
       param[NERtcConstants.NERtcParameterKey.kNERtcKeyServerRecordAudio] = gOtherModel.audioRecord
       param[NERtcConstants.NERtcParameterKey.kNERtcKeyServerRecordVideo] = gOtherModel.videoRecord
       param[NERtcConstants.NERtcParameterKey.kNERtcKeyServerRecordMode] = gOtherModel.recordMode
+    }
+    if(gOtherModel.captionMode) {
+      param["sdk.enable.asr.caption"] = gOtherModel.captionMode
+      param["sdk.asr.caption.src.language"] = gOtherModel.captionSource
+      param["sdk.asr.caption.dst.language"] = gOtherModel.captionDest
     }
     NERtcSDK.getInstance().setParameters(param)
   }
@@ -486,6 +506,38 @@ export default class ChatPresenter extends NERtcCallbackEx {
     }
 
     this.enableVoiceEffectIfNeeded()
+    this.enableVirtualBackgroundIfNeeded()
+  }
+
+  private enableVirtualBackgroundIfNeeded()  : void {
+    //是否打开
+    let backData = new NERtcConstants.NERtcVirtualBackgroundSource()
+    if (gVideoModel.virtualBackgroundEnable) {
+      backData.backgroundSourceType = gVideoModel.virtualBackgroundType
+      backData.color = gVideoModel.virtualBackgroundColor
+      backData.blur_degree = gVideoModel.virtualBackgroundBlurDegree
+
+      if (gVideoModel.virtualBackgroundSourceIndex == 0) {
+        if(gVideoModel.virtualBackgroundSource && gVideoModel.virtualBackgroundSource.length > 0) {
+          const splits = gVideoModel.virtualBackgroundSource.split('/')
+          const fileName = splits[splits.length - 1]
+          const lastPath = getContext().filesDir + "/media/" + fileName
+          backData.source = lastPath
+        }
+      }
+      else {
+        let mediaDir = getContext(this).filesDir + "/media";
+        let imageFilePath = mediaDir + "/" + "image_vb_sample_" + (gVideoModel.virtualBackgroundSourceIndex-1) + ".jpg";
+        if (fs.accessSync(imageFilePath)) {
+          backData.source = imageFilePath
+        }
+      }
+
+      NERtcSDK.getInstance().enableVirtualBackground(true, backData)
+    }
+    else {
+      NERtcSDK.getInstance().enableVirtualBackground(false, backData)
+    }
   }
 
   private enableVoiceEffectIfNeeded() : void {
@@ -625,6 +677,14 @@ export default class ChatPresenter extends NERtcCallbackEx {
     Prompt.showToast({ message: '缓存清理成功' })
   }
 
+  /**
+   * 获取画布角度
+   * @returns
+   */
+  GetCanvasBorderRadius(): number {
+    return gOtherModel.canvasBorderRadius ?? 0
+  }
+
   join(login: LoginInfo): number {
     try {
       if(gOtherModel && gOtherModel.chatDetail) {
@@ -749,6 +809,7 @@ export default class ChatPresenter extends NERtcCallbackEx {
       console.info(TAG, "=== Invoke join End. ===")
       this.enableBackgroundRunning(true);
       this.enableVoiceEffectIfNeeded();
+      this.enableVirtualBackgroundIfNeeded()
     } else {
       console.error(TAG, 'LoginInfo is empty.')
     }
@@ -909,6 +970,13 @@ export default class ChatPresenter extends NERtcCallbackEx {
     param.set('test01', 1)
     param.set('test02', '2')
     return NERtcSDK.getInstance().reportCustomEvent('ohos_test', '0x11', param)
+  }
+
+  setClientRole(audience: boolean): void {
+    let ret = NERtcSDK.getInstance().setClientRole(audience ? NERtcConstants.NERtcClientRole.kNERtcClientRoleAudience : NERtcConstants.NERtcClientRole.kNERtcClientRoleBroadcaster)
+    if(ret == NERtcConstants.ErrorCode.NO_ERROR) {
+      Prompt.showToast({ message: `设置${audience ? '观众':'主播'}成功`})
+    }
   }
 
   muteLocalAudio(enable: boolean): void {
@@ -1291,6 +1359,7 @@ export default class ChatPresenter extends NERtcCallbackEx {
 
   startPreview(login: LoginInfo) {
     login_ = login
+    this.enableVirtualBackgroundIfNeeded()
     let ret: number = NERtcSDK.getInstance().startVideoPreview(NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeMain)
     Prompt.showToast({ message: `打开预览:${ret == NERtcConstants.ErrorCode.NO_ERROR ? '成功':'失败'}`})
   }
@@ -1364,6 +1433,27 @@ export default class ChatPresenter extends NERtcCallbackEx {
     }
   }
 
+  enableLoopBack(enabled: boolean): void {
+    let ret: number = NERtcSDK.getInstance().enableLoopBackRecording(enabled)
+    if(ret == NERtcConstants.ErrorCode.NO_ERROR) {
+      Prompt.showToast({ message: `${enabled?'打开':'关闭'}音频共享成功`})
+    }
+  }
+
+  setMicMute(mute: boolean): void {
+    let ret: number = NERtcSDK.getInstance().setRecordDeviceMute(mute)
+    if(ret == NERtcConstants.ErrorCode.NO_ERROR) {
+      Prompt.showToast({ message: `麦克风设置${mute? '静音': '取消静音'}成功`})
+    }
+  }
+
+  setPlayoutDeviceMute(mute: boolean): void {
+    let ret: number = NERtcSDK.getInstance().setPlayoutDeviceMute(mute)
+    if(ret == NERtcConstants.ErrorCode.NO_ERROR) {
+      Prompt.showToast({ message: `设置播放设备${mute ? '静音':'取消静音'}成功`})
+    }
+  }
+
   realTimeVolumeEnable(enabled: boolean): void {
     let volumeDuration = 200
     let vad = false
@@ -1381,7 +1471,8 @@ export default class ChatPresenter extends NERtcCallbackEx {
 
   enablePushExternalAudioInput(enabled: boolean): boolean {
 
-    if(gAudioModel.externalAudioInputUrl == '') {
+    //Fix crash for OMNRTCG2-58947.
+    if(!gAudioModel.externalAudioInputUrl || gAudioModel.externalAudioInputUrl == '') {
       Prompt.showToast({ message: '请设置外部音频输入路径'})
       return false
     }
