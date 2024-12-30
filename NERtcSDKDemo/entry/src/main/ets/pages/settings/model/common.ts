@@ -11,7 +11,6 @@ export class AudioModel {
   autoOpenAudio: boolean = true
   autoSubAudio: boolean = true
   audioDumpType: number = 2
-  enableFrameObserver: boolean = false;
 
   //伴音
   audioMixUrl: string = 'https://music.163.com/song/media/outer/url?id=65919.mp3' //URL
@@ -56,8 +55,10 @@ export class VideoModel {
   fontCamera: boolean = true;
   encodeMode: number = 0
   decodeMode: number = 0
+  previewStreamType: number = 0
   scaleMode: number = 0  //fit
   publishStreamType: number = 1 //发布流类型 default: High
+  openVideoFrameObserverWays: number = 0 //默认typescript
   enableFrameObserver: boolean = false;
   autoEnableVideo: boolean = true //自动开启视频
   autoSubVideo: boolean = true //自定订阅视频
@@ -108,6 +109,7 @@ export class VideoModel {
 
   //虚拟背景
   virtualBackgroundEnable: boolean = false
+  virtualBackgroundForce: boolean = false
   virtualBackgroundType: number = 1
   virtualBackgroundBlurDegree: number = 3
   virtualBackgroundColor: number = 0xffffff
@@ -115,17 +117,72 @@ export class VideoModel {
   virtualBackgroundSourceIndex: number = 1
 }
 
+export class VideoModelMulti {
+
+  //第三流
+  thirdCaptureWidth: number = 0
+  thirdCaptureHeight: number = 0
+  thirdSendResolution: number = 3  //720p
+  thirdEncodeFrameMode: number = 0
+  thirdEncodeFrameRate: number = 4 //30fps
+  thirdEnableDualStream: boolean = true
+  thirdCropMode: number = 0
+  thirdMirrorMode: number = 0
+
+  //辅流
+  fourthCaptureWidth: number = 0
+  fourthCaptureHeight: number = 0
+  fourthSendResolution: number = 3  //720p
+  fourthEncodeFrameMode: number = 0
+  fourthEncodeFrameRate: number = 4 //30fps
+  fourthEnableDualStream: boolean = true
+  fourthCropMode: number = 0
+  fourthMirrorMode: number = 0
+
+  //第三流视频数据
+  externalThirdVideoType: number = 0
+  externalThirdVideoPath: string = ''
+  externalThirdVideoWidth: number = 0
+  externalThirdVideoHeight: number = 0
+  externalThirdVideoFrameRate: number = 0
+  externalThirdVideoRotation: number = 0
+
+  //第四流视频数据
+  externalFourthVideoType: number = 0
+  externalFourthVideoPath: string = ''
+  externalFourthVideoWidth: number = 0
+  externalFourthVideoHeight: number = 0
+  externalFourthVideoFrameRate: number = 0
+  externalFourthVideoRotation: number = 0
+}
+
 export class OtherModel {
 
   //通用
+  debug: boolean = true
+  appKey: string = ''
   captionMode: boolean = false
   captionSource: string = 'CH'
+  gop: string = ""
   captionDest: string = ''
-  chatDetail: boolean = true
   upFallbackOption: number = 0
   downFallbackOption: number = 0
   channelProfile: number = 0
-  canvasBorderRadius: number = 0
+  pushAddressIndex: number = 0;
+  serverRecord: boolean = false;
+  cdnPass: boolean = false;
+  canvasBorderRadius: number = 5
+  cloudProxyOption: number = 0
+  useExternalRender: boolean = false
+  loginTimeOutTime: number = 0
+
+  //推流
+  pushAddress: string = ''
+  pushAddressSet
+
+  //媒体优先级
+  mediaPriority: number = 1
+  isPreemptiveMode: boolean = false //是否开启抢占
 
   //网络测速
   upLinkBitRate: number = 5000000 //本端期望的最高发送码率
@@ -138,6 +195,19 @@ export class OtherModel {
   audioRecord: boolean = true
   videoRecord: boolean = true
   recordMode: number = 0
+
+  //媒体加密
+  mediaEncryption: number = 0 //default: Disable.
+  mediaEncryptionKey: string = 'I_am_a_key'
+
+  //低延迟直播
+  lowLatencyEnable: boolean = false;
+  fetchStreamTimeOut: number = 60  //拉流超时时间，默认值:60s
+  fetchStreamUrl: string = ''
+
+  //私有化配置
+  privateParamSetting: string = '' //私有参数配置
+  privateAddress: string = '' //私有化地址
 }
 
 export class DumpModel {
@@ -239,6 +309,9 @@ function __take_parcel__() {
     let videoData: VideoModel = JSON.parse(this.data.getSync('videoData', '') as string)
     writeToParcel(videoData, this.videoModel)
 
+    let videoDataMulti: VideoModelMulti = JSON.parse(this.data.getSync('videoDataMulti', '') as string)
+    writeToParcel(videoDataMulti, this.videoModelMulti)
+
     let otherData: OtherModel = JSON.parse(this.data.getSync('otherData', '') as string)
     writeToParcel(otherData, this.otherModel)
 
@@ -256,12 +329,14 @@ function __put_parcel__(success?: Function) {
 
   let audioData = JSON.stringify(this.audioModel)
   let videoData = JSON.stringify(this.videoModel)
+  let videoDataMulti = JSON.stringify(this.videoModelMulti)
   let otherData = JSON.stringify(this.otherModel)
   let dumpData = JSON.stringify(this.dumpModel)
   let audioEffectData = JSON.stringify(this.audioEffectModel)
 
   this.data?.putSync('audioData', audioData)
   this.data?.putSync('videoData', videoData)
+  this.data?.putSync('videoDataMulti', videoDataMulti)
   this.data?.putSync('otherData', otherData)
   this.data?.putSync('dumpData', dumpData)
   this.data?.putSync('audioEffectData', audioEffectData)

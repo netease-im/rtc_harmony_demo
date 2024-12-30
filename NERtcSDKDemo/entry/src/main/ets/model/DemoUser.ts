@@ -4,6 +4,8 @@ export default class DemoUser {
 
   xComponentIdMain: string = ""
   xComponentIdSub?: string
+  xComponentIdThird?: string
+  xComponentIdFourth?: string
 
   widthMain: string = '100%'
   heightMain: string = '100%'
@@ -12,15 +14,26 @@ export default class DemoUser {
   heightSub: string = '50%'
 
   local: boolean = false;
+  multiStream: "third" |"fourth" | null = null;
+
   private streamType: number = 0 // 0: 主流， 1: 辅流
-  private mirror: boolean = false //画布渲染镜像
+  private mirror: boolean|null = null
   private scaleMode: number = 0 //画布缩放模式
 
-  constructor(uid: bigint, local?: boolean) {
+  constructor(uid: bigint, local?: boolean, multiStream?: "third" |"fourth" | null) {
     this.uid = uid
-    this.generatorMainCanvasId()
     if(local) {
       this.local = local
+    }
+    if(multiStream){
+      this.multiStream = multiStream
+      if(multiStream == "third"){
+        this.generatorThirdCanvasId()
+      }else{
+        this.generatorFourthCanvasId()
+      }
+    }else{
+      this.generatorMainCanvasId()
     }
   }
 
@@ -53,12 +66,16 @@ export default class DemoUser {
    */
   changeScaleModeLoop(): DemoUser {
     this.scaleMode ++
-    this.scaleMode = this.scaleMode % 2
+    this.scaleMode = this.scaleMode % 3
     return this
   }
 
   switchCanvasMirror(): DemoUser {
-    this.mirror = !this.mirror
+    if (this.mirror == null) {
+      this.mirror = false
+    } else {
+      this.mirror = !this.mirror
+    }
     return this
   }
 
@@ -66,16 +83,31 @@ export default class DemoUser {
     return this.scaleMode
   }
 
-  getCanvasMirror(): boolean {
+  getCanvasMirror(): boolean|null {
     return this.mirror
   }
 
   generatorId(): string {
-    return String(this.uid) + "_" + this.xComponentIdMain + this.xComponentIdSub
+    let key: string = String(this.uid) + "_" + this.xComponentIdMain + this.xComponentIdSub
+    if(this.multiStream != null) {
+      key = key + this.multiStream;
+    }
+
+    return key
   }
 
   private generatorMainCanvasId(): void {
     this.xComponentIdMain = this.uid + '_main'
+  }
+
+  generatorThirdCanvasId(): string {
+    this.xComponentIdThird = this.uid + '_third'
+    return this.xComponentIdThird;
+  }
+
+  generatorFourthCanvasId(): string {
+    this.xComponentIdFourth = this.uid + '_fourth'
+    return this.xComponentIdFourth;
   }
 
   generatorSubCanvasId(): string {
@@ -100,7 +132,7 @@ export default class DemoUser {
   }
 
   static newInstance(user: DemoUser): DemoUser {
-    let instance = new DemoUser(user.uid)
+    let instance = new DemoUser(user.uid, user.local, user.multiStream)
     instance.move(user)
     return instance
   }

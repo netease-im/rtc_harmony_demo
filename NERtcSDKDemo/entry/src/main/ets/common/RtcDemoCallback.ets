@@ -44,12 +44,12 @@ export class RtcDemoCallback extends NERtcCallbackEx {
     console.info(this.tag, "onUserAudioStop, uid:" + uid);
   }
 
-  onUserVideoStart(uid: bigint, maxProfile: NERtcConstants.NERtcVideoProfileType): void {
-    console.info(this.tag, "onUserVideoStart, uid:" + uid, ", profile:" + maxProfile);
+  onUserVideoStart(uid: bigint, maxProfile: NERtcConstants.NERtcVideoProfileType, streamType?: NERtcConstants.NERtcVideoStreamType): void {
+    console.info(this.tag, "onUserVideoStart, uid:" + uid, ", profile:" + maxProfile + ", streamType: " + streamType);
     RtcDemoLogic.sharedInstance().notifyOnUserVideoStart(uid, maxProfile);
   }
 
-  onUserVideoStop(uid: bigint): void {
+  onUserVideoStop(uid: bigint, streamType?: NERtcConstants.NERtcVideoStreamType): void {
     console.info(this.tag, "onUserVideoStop, uid:" + uid);
     RtcDemoLogic.sharedInstance().notifyOnUserVideoStop(uid);
   }

@@ -1,7 +1,8 @@
 import { VideoSetting } from './settings/tab/VideoSetting'
+import { VideoMultiSetting } from './settings/tab/VideoMultiSetting'
 import { AudioSetting } from './settings/tab/AudioSettings'
 import { preferences } from '@kit.ArkData'
-import { LoadingDialog } from '@kit.ArkUI'
+import { LoadingDialog, Prompt } from '@kit.ArkUI'
 import SDK from './chat/Presenter1'
 import { OtherSetting } from './settings/tab/OtherSettings'
 import * as parcelable from './settings/model/common'
@@ -21,6 +22,7 @@ struct Settings {
   private reInit: boolean = true
 
   @State videoModel: parcelable.VideoModel = new parcelable.VideoModel
+  @State videoModelMulti: parcelable.VideoModelMulti = new parcelable.VideoModelMulti
   @State audioModel: parcelable.AudioModel = new parcelable.AudioModel
   @State otherModel: parcelable.OtherModel = new parcelable.OtherModel
   @State dumpModel: parcelable.DumpModel = new parcelable.DumpModel
@@ -44,26 +46,33 @@ struct Settings {
   }
 
   onBackPress(): boolean | void {
-
     this.ReInitDialog.open()
-    parcelable.Operate(this, FUNC.PUT, () => {
-      console.info(this.TAG, 'Flush data success, re-init engine.')
-      if(this.reInit) {
-        SDK.getInstance().release()
-        SDK.getInstance().init(getContext())
-      }
-    })
-
-    const baseDir = getContext(this).filesDir
-    parcelable.Operate(this, FUNC.COPY, this.videoModel.virtualBackgroundSource, baseDir)
     setTimeout(() => {
-      parcelable.Operate(this, FUNC.COPY, this.audioModel.audioEffect1Url, baseDir)
-      parcelable.Operate(this, FUNC.COPY, this.audioModel.audioMixPath, baseDir)
-      parcelable.Operate(this, FUNC.COPY, this.audioModel.externalAudioInputUrl, baseDir)
-      parcelable.Operate(this, FUNC.COPY, this.audioModel.externalSubAudioInputUrl, baseDir)
-      parcelable.Operate(this, FUNC.COPY, this.videoModel.externalVideoPath, baseDir)
-      parcelable.Operate(this, FUNC.COPY, this.videoModel.externalSubVideoPath, baseDir)
-      this.ReInitDialog.close()
+      parcelable.Operate(this, FUNC.PUT, () => {
+
+        console.info(this.TAG, 'Flush data success, re-init engine.')
+
+        if(this.reInit) {
+          SDK.getInstance().release()
+          SDK.getInstance().init(getContext())
+        }
+
+        const baseDir = getContext(this).filesDir
+        parcelable.Operate(this, FUNC.COPY, this.videoModel.virtualBackgroundSource, baseDir)
+
+        parcelable.Operate(this, FUNC.COPY, this.audioModel.audioEffect1Url, baseDir)
+        parcelable.Operate(this, FUNC.COPY, this.audioModel.audioMixPath, baseDir)
+        parcelable.Operate(this, FUNC.COPY, this.audioModel.externalAudioInputUrl, baseDir)
+        parcelable.Operate(this, FUNC.COPY, this.audioModel.externalSubAudioInputUrl, baseDir)
+        parcelable.Operate(this, FUNC.COPY, this.videoModel.externalVideoPath, baseDir)
+        parcelable.Operate(this, FUNC.COPY, this.videoModelMulti.externalThirdVideoPath, baseDir)
+        parcelable.Operate(this, FUNC.COPY, this.videoModel.externalSubVideoPath, baseDir)
+        parcelable.Operate(this, FUNC.COPY, this.videoModelMulti.externalFourthVideoPath, baseDir)
+
+        Prompt.showToast({ message: '重置参数'})
+        SDK.getInstance().resetParams(getContext())
+        this.ReInitDialog.close()
+      })
     }, 500)
   }
 
@@ -75,6 +84,10 @@ struct Settings {
           TabContent() {
             VideoSetting({ videoModel: $videoModel, isInMeeting: !this.reInit }).width('100%').height('100%')
           }.tabBar(BottomTabBarStyle.of($r('app.media.video_common'), '视频'))
+
+          TabContent() {
+            VideoMultiSetting({ videoModel: $videoModelMulti, isInMeeting: !this.reInit }).width('100%').height('100%')
+          }.tabBar(BottomTabBarStyle.of($r('app.media.video_multi'), '多流'))
 
           TabContent() {
             AudioSetting({ audioModel: $audioModel, isInMeeting: !this.reInit }).width('100%').height('100%')

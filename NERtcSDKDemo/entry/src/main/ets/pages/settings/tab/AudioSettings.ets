@@ -450,21 +450,6 @@ export struct AudioSetting {
             }
           })
 
-          ComposeListItem({
-            contentItem: {
-              primaryText: '开启音频数据回调',
-            },
-            operateItem: {
-              switch: {
-                isCheck: this.audioModel.enableFrameObserver,
-                onChange: value => {
-                  this.audioModel.enableFrameObserver = value
-                  Prompt.showToast({ message: value ? "开启了音频数据回调" : "关闭了音频数据回调"})
-                }
-              }
-            }
-          })
-
         }.divider({
           strokeWidth: 1,
           startMargin: 10,

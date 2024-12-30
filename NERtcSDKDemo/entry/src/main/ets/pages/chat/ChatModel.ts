@@ -106,6 +106,7 @@ export interface CallbackResponse extends Response {
 export enum UI {
   AUDIO = 0,
   VIDEO = 1,
+  VIDEO_MULTI = 3,
   OTHER = 2
 }
 

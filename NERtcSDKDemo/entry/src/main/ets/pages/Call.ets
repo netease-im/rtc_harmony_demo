@@ -204,7 +204,7 @@ struct Call {
                           console.info(this.TAG, `item:${item}`)
                           console.info(this.TAG, `User:${this.login?.uid} surface create.`)
                           let user = this.users.find(user => user.uid == BigInt(this.login?.uid ?? "0"))
-                          if(user) this.chat?.attach(user)
+                          if(user) this.chat?.attach(user, user.multiStream)
                         }),
                         onDestroy: (() => {
                           console.info(this.TAG, `User:${this.login?.uid} surface release.`)
@@ -224,7 +224,7 @@ struct Call {
                   onLoad: (() => {
                     if(this.users[1]) {
                       console.info(this.TAG, `User:${this.users[1].uid} surface create.`)
-                      this.chat?.attach(this.users[1])
+                      this.chat?.attach(this.users[1], this.users[1].multiStream)
                     }
                   }),
                   onDestroy: (() => {

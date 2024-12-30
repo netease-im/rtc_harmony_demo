@@ -5,8 +5,6 @@ import { BusinessError } from '@kit.BasicServicesKit';
 import { VideoModel } from '../model/common';
 import { NetEaseListLogicDialog } from '../view/NetEaseListLogicDialog';
 import { NetEaseInputLogicDialog } from '../view/NetEaseInputLogicDialog';
-import fs from '@ohos.file.fs';
-import { FileUtil } from '../../../common/FileUtil';
 @Component
 export struct VideoSetting {
 
@@ -16,6 +14,7 @@ export struct VideoSetting {
 
   private encodeModeArray: string[] = ['默认', '软编', '硬编']
   private decodeModeArray: string[] = ['默认', '软解', '硬解']
+  private previewVideoStreamType: string[] = ['主流', '辅流', '第三流', '第四流']
   private scaleModeArray: string[] = ['FIT', 'FILL', 'BALANCED']
   private sendResolutionArray: string[] = ['Lowest', 'Low', 'Standard', '720P', '1080P']
   private encodeFrameMode: string[] = ['Default', 'MaintainFramerate', 'MaintainQuality', 'Balanced']
@@ -29,6 +28,7 @@ export struct VideoSetting {
   private virtualBackgroundTypeArray: string[] = ['颜色', '图片', '雾化']
   private virtualBackgroundBlurDegreeArray: string[] = ['Low', 'Medium', 'High']
   private virtualBackgroundSourceArray: string[] = ['自选文件', '图片1', '图片2', '图片3', '图片4', '图片5', '图片6']
+  private videoCallbackWays: string[] = ['Typescript', 'c++']
 
   private isHiddenInMeeting(): Visibility {
     return this.isInMeeting ? Visibility.None : Visibility.Visible;
@@ -59,6 +59,15 @@ export struct VideoSetting {
                   Prompt.showToast({ message: value ? "选择了前置摄像头" : "选择了后置摄像头"})
                 }
               }
+            }
+          })
+
+          NetEaseListLogicDialog({
+            array: this.previewVideoStreamType,
+            title: '预览流类型',
+            index: this.videoModel.previewStreamType,
+            choose: index => {
+              this.videoModel.previewStreamType = index
             }
           })
 
@@ -95,6 +104,15 @@ export struct VideoSetting {
             index: this.videoModel.publishStreamType,
             choose: index => {
               this.videoModel.publishStreamType = index
+            }
+          })
+
+          NetEaseListLogicDialog({
+            array: this.videoCallbackWays,
+            title: '视频回调处理方式',
+            index: this.videoModel.openVideoFrameObserverWays,
+            choose: index => {
+              this.videoModel.openVideoFrameObserverWays = index
             }
           })
 
@@ -555,6 +573,21 @@ export struct VideoSetting {
                 onChange: value => {
                   this.videoModel.virtualBackgroundEnable = value
                   Prompt.showToast({ message: value ? '打开虚拟背景': '关闭虚拟背景'})
+                }
+              }
+            }
+          })
+
+          ComposeListItem({
+            contentItem: {
+              primaryText: '强制开启'
+            },
+            operateItem: {
+              switch: {
+                isCheck: this.videoModel.virtualBackgroundForce,
+                onChange: value => {
+                  this.videoModel.virtualBackgroundForce = value
+                  Prompt.showToast({ message: value ? '强制开启':'关闭强制开启'})
                 }
               }
             }

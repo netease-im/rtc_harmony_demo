@@ -4,8 +4,12 @@ import { CallDetailDialog } from './CallDetailDialog';
 import { SubDetailDialog } from './SubDetailDialog';
 import { UI } from '../ChatModel';
 import { WhiteBlackListDialog } from './WhiteBlackListDialog';
-import Handle from '../../../common/Handle'
 import { OtherModel } from '../../settings/model/common';
+import { EditTextBaseDialog } from './EditTextBaseDialog';
+import { MediaRelayDialog } from './MediaRelayDialog';
+import { StartPKDialog } from './StartPKDialog';
+import {StartSeatDialog} from './StartSeatDialog';
+import LiveStreamingKit from '../../LiveStreamingKit';
 
 export let gOtherModel: OtherModel
 
@@ -13,13 +17,16 @@ export let gOtherModel: OtherModel
 export struct MoreFunction {
 
   private TAG: string = 'MoreFunction'
-  @Link callDetail: string
   @Link uiType: UI
 
   @State mainVideoEnabled: boolean = false //主流视频开关
   @State subVideoEnabled: boolean = false //辅流视频开关
+  @State thirdVideoEnabled: boolean = false //第三流视频开关
+  @State fourthVideoEnabled: boolean = false //第四流视频开关
   @State mainVideoMute: boolean = false //主流视频mute
   @State subVideoMute: boolean = false //辅流视频mute
+  @State thirdVideoMute: boolean = false //第三流视频mute
+  @State fourthVideoMute: boolean = false //第四流视频mute
   @State mainAudioEnabled: boolean = false //主流音频开关
   @State subAudioEnabled: boolean = false //辅流音频开关
   @State mainAudioMute: boolean = false //主流音频静音开/关
@@ -42,6 +49,8 @@ export struct MoreFunction {
 
   @State externalMainVideoInputEnable: boolean = false //外部视频输入
   @State externalSubVideoInputEnable: boolean = false //外部视频辅流输入
+  @State externalThirdVideoInputEnable: boolean = false //第三流视频输入
+  @State externalFourthVideoInputEnable: boolean = false //第四流视频辅流输入
 
   @State audioFrameObserverEnable: boolean = false; //音频数据回调
   @State videoFrameObserverEnable: boolean = false; //视频数据回调
@@ -53,6 +62,8 @@ export struct MoreFunction {
   @State setRole: boolean = false //是否设置成观众
 
   @State captionMode: boolean = false
+  @State startPKMode: boolean = false
+  @State startSeatMode: boolean = false
 
   @State qosCallbackEnable: boolean = false //qos callback 回调
   @State preDecodeCallbackEnable: boolean = false //predecode callback 回调
@@ -86,16 +97,6 @@ export struct MoreFunction {
     cornerRadius: 10
   })
 
-  detailDialog: CustomDialogController = new CustomDialogController({
-    builder: CallDetailDialog({
-      content: this.callDetail
-    }),
-    alignment: DialogAlignment.TopEnd,
-    width: '50%',
-    height: '50%',
-    cornerRadius: 10
-  })
-
   subscribeDialog: CustomDialogController = new CustomDialogController({
     builder: SubDetailDialog({
       title: '订阅/取消订阅',
@@ -110,6 +111,119 @@ export struct MoreFunction {
     }),
     alignment: DialogAlignment.Center,
     width: '80%',
+    cornerRadius: 10
+  })
+
+  highPriorityDialog: CustomDialogController = new CustomDialogController({
+    builder: EditTextBaseDialog({
+      title: '设置音频高优先级',
+      callback: (uid: string) => {
+        if(uid !== undefined && uid !== '') {
+          ChatPresenter.getInstance().setRemoteAudioHighPriority(BigInt(uid), true)
+        } else {
+          Prompt.showToast({ message: '没有输入uid.'})
+        }
+      }
+    }),
+    alignment: DialogAlignment.Center,
+    width: '80%',
+    cornerRadius: 10
+  })
+
+  switchChannelDialog: CustomDialogController = new CustomDialogController({
+    builder: EditTextBaseDialog({
+      title: '切换房间',
+      callback: (cname: string) => {
+        if(cname !== undefined && cname !== '') {
+          ChatPresenter.getInstance().switchChannel(cname)
+        } else {
+          Prompt.showToast({ message: '没有填入cname'})
+        }
+      }
+    }),
+    alignment: DialogAlignment.Center,
+    width: '80%',
+    cornerRadius: 10
+  })
+
+  mBeginPKDialog: CustomDialogController = new CustomDialogController({
+    builder: StartPKDialog({
+      callback: (channelName: string, remoteUid: string) => {
+        if(channelName !== undefined && channelName !== '') {
+          channelName = channelName.trim()
+          remoteUid = remoteUid.trim()
+          let ret = ChatPresenter.getInstance().enterPK(channelName, remoteUid)
+          if(ret == 0){
+            this.startPKMode = true
+          }else{
+            this.startPKMode = false
+          }
+        } else {
+          Prompt.showToast({ message: '没有填入channelName'})
+        }
+      }
+    }),
+    alignment: DialogAlignment.Center,
+    width: '80%',
+    cornerRadius: 10
+  })
+
+  mBeginSeatDialog: CustomDialogController = new CustomDialogController({
+    builder: StartSeatDialog({
+      callback: (remoteUid: string) => {
+        if(remoteUid !== undefined && remoteUid !== '') {
+          remoteUid = remoteUid.trim()
+          let ret = ChatPresenter.getInstance().enterSeat(remoteUid)
+          if(ret == 0){
+            this.startSeatMode = true
+          }else{
+            this.startSeatMode = false
+          }
+        } else {
+          Prompt.showToast({ message: '没有填入Uid'})
+        }
+      }
+    }),
+    alignment: DialogAlignment.Center,
+    width: '80%',
+    cornerRadius: 10
+  })
+
+  aiManualInterruptDialog: CustomDialogController = new CustomDialogController({
+    builder: EditTextBaseDialog({
+      title: 'ai打断 输入uid',
+      callback: (uid: string) => {
+        if(uid !== undefined && uid !== '') {
+          ChatPresenter.getInstance().aiManualInterrupt(BigInt(uid))
+        } else {
+          Prompt.showToast({ message: '没有输入打断uid'})
+        }
+      }
+    }),
+    alignment: DialogAlignment.Center,
+    width: '80%',
+    cornerRadius: 10
+  })
+  mediaRelayDialog: CustomDialogController = new CustomDialogController({
+    builder: MediaRelayDialog({
+      addCB: (input: string) => {
+        let result = input.split("#")
+        ChatPresenter.getInstance().startMediaRelay(result, false)
+      },
+      updateCB: (input: string) => {
+        let result = input.split("#")
+        ChatPresenter.getInstance().startMediaRelay(result, true)
+      },
+      stopCB: () => {
+        ChatPresenter.getInstance().stopMediaRelay()
+      },
+      roleCB: (role: boolean) => {
+        ChatPresenter.getInstance().setClientRole(role)
+      }
+    }),
+    alignment: DialogAlignment.Center,
+    width: '80%',
+    height: '40%',
     cornerRadius: 10
   })
 
@@ -219,6 +333,12 @@ export struct MoreFunction {
         }
 
         GridItem() {
+          Button('扬声器状态', { type: ButtonType.Normal, stateEffect: true}).onClick(() => {
+            ChatPresenter.getInstance().getSpeakerState()
+          }).width('100%').height(50).fontSize(15).borderRadius(10)
+        }
+
+        GridItem() {
           Button(!this.audioDumpEnable ? 'AudioDump开' : 'AudioDump关', { type: ButtonType.Normal, stateEffect: true}).onClick(() => {
             ChatPresenter.getInstance().enableAudioDump(!this.audioDumpEnable)
             this.audioDumpEnable = !this.audioDumpEnable
@@ -280,7 +400,50 @@ export struct MoreFunction {
           }).width('100%').height(50).fontSize(15).borderRadius(10)
         }
       }
+      if(this.uiType == UI.VIDEO_MULTI) {
+        GridItem() {
+          Button(!this.thirdVideoEnabled ? '第三流开':'第三流关', { type: ButtonType.Normal, stateEffect: true}).onClick(() => {
+            ChatPresenter.getInstance().enableThirdVideo(!this.thirdVideoEnabled)
+            this.thirdVideoEnabled = !this.thirdVideoEnabled
+          }).width('100%').height(50).fontSize(15).borderRadius(10)
+        }
 
+        GridItem() {
+          Button(!this.fourthVideoEnabled ? '第四流开':'第四流关', { type: ButtonType.Normal, stateEffect: true}).onClick(() => {
+            ChatPresenter.getInstance().enableFourthVideo(!this.fourthVideoEnabled)
+            this.fourthVideoEnabled = !this.fourthVideoEnabled
+          }).width('100%').height(50).fontSize(15).borderRadius(10)
+        }
+
+        GridItem() {
+          Button(!this.thirdVideoMute ? '第三流Mute':'unMute', { type: ButtonType.Normal, stateEffect: true }).onClick(() => {
+            ChatPresenter.getInstance().muteThirdVideo(!this.thirdVideoMute)
+            this.thirdVideoMute = !this.thirdVideoMute
+          }).width('100%').height(50).fontSize(15).borderRadius(10)
+        }
+
+        GridItem() {
+          Button(!this.fourthVideoMute ? '第四流Mute':'UnMute', { type: ButtonType.Normal, stateEffect: true }).onClick(() => {
+            ChatPresenter.getInstance().muteFourthVideo(!this.fourthVideoMute)
+            this.fourthVideoMute = !this.fourthVideoMute
+          }).width('100%').height(50).fontSize(15).borderRadius(10)
+        }
+
+        GridItem() {
+          Button(!this.externalThirdVideoInputEnable ? '三流外部视频开': '三流外部视频关', { type: ButtonType.Normal, stateEffect: true}).onClick(() => {
+            ChatPresenter.getInstance().enableThirdPushExternalVideoInput(!this.externalThirdVideoInputEnable)
+            this.externalThirdVideoInputEnable = !this.externalThirdVideoInputEnable
+          }).width('100%').height(50).fontSize(12).borderRadius(10)
+        }
+
+        GridItem() {
+          Button(!this.externalFourthVideoInputEnable ? '四流外部视频开': '四流外部视频关', { type: ButtonType.Normal, stateEffect: true }).onClick(() => {
+            ChatPresenter.getInstance().enableFourthPushExternalVideoInput(!this.externalFourthVideoInputEnable)
+            this.externalFourthVideoInputEnable = !this.externalFourthVideoInputEnable
+          }).width('100%').height(50).fontSize(12).borderRadius(10)
+        }
+
+      }
       if(this.uiType == UI.VIDEO) {
 
         GridItem() {
@@ -382,6 +545,12 @@ export struct MoreFunction {
             this.preDecodeCallbackEnable = !this.preDecodeCallbackEnable
           }).width('100%').height(50).fontSize(15).borderRadius(10)
         }
+
+        GridItem() {
+          Button('发送SEI', { type: ButtonType.Normal, stateEffect: true }).onClick(() => {
+            ChatPresenter.getInstance().sendSEI()
+          }).width('100%').height(50).fontSize(15).borderRadius(10)
+        }
       }
 
       if(this.uiType == UI.OTHER) {
@@ -389,12 +558,6 @@ export struct MoreFunction {
         GridItem() {
           Button('会内设置', { type: ButtonType.Normal, stateEffect: true}).onClick(() => {
             if(this.turnToSetting) this.turnToSetting()
-          }).width('100%').height(50).fontSize(15).borderRadius(10)
-        }
-
-        GridItem() {
-          Button('质量透明', { type: ButtonType.Normal, stateEffect: true}).onClick(() => {
-            this.detailDialog.open()
           }).width('100%').height(50).fontSize(15).borderRadius(10)
         }
 
@@ -429,6 +592,59 @@ export struct MoreFunction {
           Button(!this.captionMode ? '开启字幕':'关闭字幕', {type: ButtonType.Normal, stateEffect: true}).onClick(() => {
             ChatPresenter.getInstance().triggerCaptionMode(!this.captionMode)
             this.captionMode = !this.captionMode
+          }).width('100%').height(50).fontSize(15).borderRadius(10)
+        }
+
+        GridItem() {
+          Button('ai打断', {type: ButtonType.Normal, stateEffect: true}).onClick(() => {
+            this.aiManualInterruptDialog.open()
+          }).width('100%').height(50).fontSize(15).borderRadius(10)
+        }
+
+        GridItem() {
+          Button('音频高优先级', { type: ButtonType.Normal, stateEffect: true}).onClick(() => {
+            this.highPriorityDialog.open()
+          }).width('100%').height(50).fontSize(15).borderRadius(10)
+        }
+
+        GridItem() {
+          Button('切换房间', { type: ButtonType.Normal, stateEffect: true}).onClick(() => {
+            this.switchChannelDialog.open()
+          }).width('100%').height(50).fontSize(15).borderRadius(10)
+        }
+
+        GridItem() {
+          Button('跨房间推流', { type: ButtonType.Normal, stateEffect: true}).onClick(() => {
+            this.mediaRelayDialog.open()
+          }).width('100%').height(50).fontSize(15).borderRadius(10)
+        }
+
+        GridItem() {
+          Button(this.startPKMode ? '结束PK':'开始PK', { type: ButtonType.Normal, stateEffect: true}).onClick(() => {
+            if(this.startPKMode == false) {
+              this.mBeginPKDialog.open()
+            }else{
+              let ret = ChatPresenter.getInstance().leavePK()
+              if(ret == 0){
+                this.startPKMode = false
+              }else{
+                this.startPKMode = true
+              }
+            }
+          }).width('100%').height(50).fontSize(15).borderRadius(10)
+        }
+        GridItem() {
+          Button(this.startSeatMode ? '结束连麦':'开始连麦', { type: ButtonType.Normal, stateEffect: true}).onClick(() => {
+            if(this.startSeatMode == false) {
+              this.mBeginSeatDialog.open()
+            }else{
+              let ret = ChatPresenter.getInstance().leaveSeat()
+              if(ret == 0){
+                this.startSeatMode = false
+              }else{
+                this.startSeatMode = true
+              }
+            }
           }).width('100%').height(50).fontSize(15).borderRadius(10)
         }
 

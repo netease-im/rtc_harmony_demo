@@ -7,13 +7,13 @@ import { NetEaseProbeLoginDialog } from '../pages/home/dialog/StartProbeDialog'
 import SDK from './chat/Presenter1'
 import UIDelegate, { OPERATOR } from './chat/Delegate';
 import DemoUser from '../model/DemoUser';
-import { NERtcConstants } from '@nertc/nertc_sdk';
+import { NERtcConstants, NERtcSDK } from '@nertc/nertc_sdk';
 import ChatPresenter from './chat/Presenter1';
 import fs from '@ohos.file.fs';
 import { bundleManager } from '@kit.AbilityKit';
-import { connection } from '@kit.NetworkKit';
 import { BusinessError } from '@kit.BasicServicesKit';
-
+import Prompt from '@system.prompt';
+import http from '@ohos.net.http'
 
 @Entry
 @Component
@@ -36,7 +36,11 @@ struct Home {
         })
       MenuItem({ content: "关于", startIcon: $r('app.media.about'), endIcon: $r('app.media.right_arrow') })
         .onClick(() => {
-          prompt.showToast({ message: 'In development.'})
+          router.pushUrl({ url: 'pages/About'}, err => {
+            if(err) {
+              prompt.showToast({ message: 'turn to about pages filed.', duration: 2000 })
+            }
+          })
         })
     }
   }
@@ -51,6 +55,8 @@ struct Home {
   @State networkQuality: number|null = null
   @State networkResult: NERtcConstants.NERtcProbeResult|null = null
   @State probeEnd: boolean = false
+  @State safeMode: boolean = true
+  private rtcEngineInitDone: boolean = false
 
   delegate: UIDelegate = {
 
@@ -98,6 +104,15 @@ struct Home {
     alignment: DialogAlignment.Center
   })
 
+  InitEngineDialog: CustomDialogController = new CustomDialogController({
+    builder: LoadingDialog({
+      content: "正在初始化引擎"
+    }),
+    autoCancel: false,
+    customStyle: true,
+    alignment: DialogAlignment.Center
+  })
+
   networkQualityDialog: CustomDialogController = new CustomDialogController({
     builder: NetEaseProbeLoginDialog({
       networkQuality: this.networkQuality,
@@ -122,11 +137,7 @@ struct Home {
   }
 
   onPageShow() {
-
     console.info(this.TAG, '=== onPageShow === ')
-    SDK.getInstance().setDir(getContext(this).filesDir);// must set filesDir before init
-    SDK.getInstance().init(getContext(this))
-    SDK.getInstance().setDelegate(this.delegate)
     this.checkAccessToken()
     this.RequestPermission()
 
@@ -148,6 +159,23 @@ struct Home {
 
     } catch (e) {
       console.info(this.TAG, 'copy asserts failed.')
+    } finally {
+      SDK.getInstance().setDir(getContext(this).filesDir);// must set filesDir before init
+      SDK.getInstance().setDelegate(this.delegate)
+    }
+  }
+
+  private InitRtcEngine() {
+    if (!this.rtcEngineInitDone) {
+      //load application safeMode.
+      this.safeMode = SDK.getInstance().GetLogicDataModel().GetDemoSafeMode()
+      console.info(this.TAG, `init engine start, demo use safeMode:${this.safeMode}`)
+
+      SDK.getInstance().init(getContext(this))
+      console.info(this.TAG, 'init engine end.')
+      this.rtcEngineInitDone = true
+    } else {
+      console.info('rtc engine has init already.')
     }
   }
 
@@ -239,10 +267,21 @@ struct Home {
             .margin({ top: 20, left: 10, right: 10 })
             .copyOption(CopyOptions.LocalDevice)
 
-            Row({ space: 35}) {
+          Toggle({ type: ToggleType.Button , isOn: this.safeMode }) {
+            Text('安全模式').fontColor(Color.White).fontSize(16)
+          }.width(106) .selectedColor('#336600').onChange((isOn: boolean) => {
+            Prompt.showToast({ message: `安全模式已${isOn ? '打开':'关闭'}`})
+            this.safeMode = isOn
+            SDK.getInstance().GetLogicDataModel().SaveDemoSaveMode(this.safeMode)
+          }).margin({ top: 20, left: 10 }).padding(5)
+
+          Row({ space: 35}) {
               Button("入会", { type: ButtonType.Normal, stateEffect: true})
                 .onClick(() => {
-                  this.JoinRoom()
+                  this.joinRoomDialog.open()
+                  setTimeout(() => {
+                    this.JoinRoom()
+                  }, 500)
                 })
                 .width('35%')
                 .height(60)
@@ -252,16 +291,7 @@ struct Home {
 
               Button("预览", { type: ButtonType.Normal, stateEffect: true})
                 .onClick(() => {
-                  let param: model.LoginInfo = {
-                    cname: this.cname,
-                    uid: this.uid
-                  }
-                  router.pushUrl({ url: 'pages/Preview', params: param }, err => {
-                    if(err) {
-                      prompt.showToast({ message: 'turn to settings failed.', duration: 2000 })
-                    }
-                    console.info(this.TAG, 'turn to settings success.')
-                  })
+                  this.InitEngineBeforeExecuteTask(this.EnterPreviewTask)
                 })
                 .width('35%')
                 .height(60)
@@ -269,14 +299,43 @@ struct Home {
                 .borderRadius(10)
                 .clickEffect({ level: ClickEffectLevel.HEAVY, scale: 0.5 })
 
-            }.justifyContent(FlexAlign.Center).width('100%').margin({ top: 50 }).height(80)
+            }.justifyContent(FlexAlign.Center).width('100%').margin({ top: 30 }).height(80)
+
+
+          Row({ space: 35}) {
+            Button("融合推流", { type: ButtonType.Normal, stateEffect: true})
+              .onClick(() => {
+                this.joinRoomDialog.open()
+                setTimeout(() => {
+                  this.StartPushStream()
+                }, 500)
+              })
+              .width('35%')
+              .height(60)
+              .fontSize(18)
+              .borderRadius(10)
+              .clickEffect({ level: ClickEffectLevel.HEAVY, scale: 0.5 })
+
+          }.justifyContent(FlexAlign.Center).width('100%').margin({ top: 10 }).height(80)
+
+          Row( { space: 5} ) {
+            Button('低延迟拉流', { type: ButtonType.Normal,  stateEffect: true  })
+              .fontSize(18)
+              .width('35%')
+              .height(60)
+              .borderRadius(10)
+              .clickEffect({ level: ClickEffectLevel.HEAVY, scale: 0.8 }).onClick(() => {
+                this.InitEngineBeforeExecuteTask(this.StartPullStream)
+            })
+          }.justifyContent(FlexAlign.Center).width('100%').margin({top: 10}).height(80)
+
 
           Row({ space: 5 }) {
             Button('检查权限', { type: ButtonType.Normal, controlSize: ControlSize.SMALL, stateEffect: true, buttonStyle: ButtonStyleMode.NORMAL }).fontSize(18).clickEffect({ level: ClickEffectLevel.HEAVY, scale: 0.8 }).onClick(() => {
               ChatPresenter.getInstance().checkPermission()
             })
             Button('清除缓存', { type: ButtonType.Normal, controlSize: ControlSize.SMALL, stateEffect: true, buttonStyle: ButtonStyleMode.NORMAL }).fontSize(18).clickEffect({ level: ClickEffectLevel.HEAVY, scale: 0.8 }).onClick(() => {
-              ChatPresenter.getInstance().clearCache()
+              ChatPresenter.getInstance().clearCache(getContext(this))
             }).fontColor(Color.Red)
 
             Button('模拟崩溃', { type: ButtonType.Normal, controlSize: ControlSize.SMALL, stateEffect: true, buttonStyle: ButtonStyleMode.NORMAL }).fontSize(18).clickEffect({ level: ClickEffectLevel.HEAVY, scale: 0.8 }).onClick(() => {
@@ -286,9 +345,12 @@ struct Home {
 
           Row({ space: 5 }) {
             Button('会前测速', { type: ButtonType.Normal, controlSize: ControlSize.SMALL, stateEffect: true, buttonStyle: ButtonStyleMode.NORMAL }).fontSize(18).clickEffect({ level: ClickEffectLevel.HEAVY, scale: 0.8 }).onClick(() => {
-              let ret = ChatPresenter.getInstance().enableLastMileProbe(true)
-              if(ret == NERtcConstants.ErrorCode.NO_ERROR)
-                this.networkQualityDialog.open()
+              this.InitEngineBeforeExecuteTask(this.EnterNetWorkProbeTest)
+            })
+            Button('设备支持虚拟背景?', { type: ButtonType.Normal, controlSize: ControlSize.SMALL, stateEffect: true, buttonStyle: ButtonStyleMode.NORMAL}).fontSize(18).clickEffect({ level: ClickEffectLevel.HEAVY, scale: 0.8 }).onClick(() => {
+              this.InitEngineBeforeExecuteTask(() => {
+                ChatPresenter.getInstance().queryVirtualBackgroundSupport()
+              })
             })
           }.justifyContent(FlexAlign.Start).margin({ top: 10, left: 10, right: 10})
         }
@@ -297,6 +359,78 @@ struct Home {
     }
     .height('100%')
   }
+
+  private loadChannelToken() {
+    Prompt.showToast({ message: '开启请求token.'})
+    const url = SDK.getInstance().GetLogicDataModel().GetDemoTokenUrl()
+    const appKey = SDK.getInstance().GetLogicDataModel().GetDemoAppKey()
+    console.info(this.TAG, `start loadChannelToken, url:${url}, appKey:${appKey}`)
+
+    let queryString = url + '?uid=' + this.uid + "&appkey=" + appKey
+    let httpRequest = http.createHttp()
+    let options: http.HttpRequestOptions = {
+      method: http.RequestMethod.POST,
+      readTimeout: 5000,
+      expectDataType: http.HttpDataType.STRING
+    }
+
+    try {
+      httpRequest.request(queryString, options).then(response => {
+        console.info(this.TAG, 'result:' + response.result as string)
+        interface Response {
+          code: number;
+          checksum: string;
+        }
+        const result: Response = JSON.parse(response.result as string)
+        if (result.code != 200) {
+          Prompt.showToast({ message: '请求token失败'})
+          this.joinRoomDialog.close()
+        } else {
+          Prompt.showToast({ message: '请求token成功，开始请求加入房间'})
+          let ret = SDK.getInstance().join({ cname: this.cname, uid: this.uid, token: result.checksum})
+          if (ret != NERtcConstants.ErrorCode.NO_ERROR) {
+            Prompt.showToast({ message: '请求房间失败, error:' + ret})
+            this.joinRoomDialog.close()
+          }
+        }
+      })
+    } catch (e) {
+      Prompt.showToast({ message: `请求token失败，${JSON.stringify(e)}`})
+    }
+  }
+
+  private InitEngineBeforeExecuteTask(task:() => void) {
+    if (!this.rtcEngineInitDone) {
+      this.InitEngineDialog.open()
+      setTimeout(() => {
+        this.InitRtcEngine()
+        this.InitEngineDialog.close()
+        task()
+      }, 500)
+    } else {
+      task()
+    }
+  }
+
+  private EnterNetWorkProbeTest = (): void => {
+    let ret = ChatPresenter.getInstance().enableLastMileProbe(true)
+    if(ret == NERtcConstants.ErrorCode.NO_ERROR)
+      this.networkQualityDialog.open()
+  }
+
+  private EnterPreviewTask = (): void => {
+    let param: model.LoginInfo = {
+      cname: this.cname,
+      uid: this.uid
+    }
+    router.pushUrl({ url: 'pages/Preview', params: param }, err => {
+      if(err) {
+        prompt.showToast({ message: 'turn to settings failed.', duration: 2000 })
+      }
+      console.info(this.TAG, 'turn to settings success.')
+    })
+  }
+
   async JoinRoom() {
 
     if(this.cname === "") {
@@ -308,12 +442,47 @@ struct Home {
       return
     }
 
-    this.joinRoomDialog.open()
-    let ret = SDK.getInstance().join({ cname: this.cname, uid: this.uid })
+    //*** 考虑到私有化设置，在进房间之前初始化引擎
+    this.InitRtcEngine()
+
+    //check is safe-mode.
+    if (this.safeMode) {
+      this.loadChannelToken()
+    } else {
+      let ret = SDK.getInstance().join({ cname: this.cname, uid: this.uid })
+      if(ret != NERtcConstants.ErrorCode.NO_ERROR) {
+        prompt.showToast({ message: 'Join channel failed, result: ' + ret, duration: 2000 })
+        this.joinRoomDialog.close()
+      }
+    }
+  }
+
+  StartPushStream(){
+
+    if(this.cname === "") {
+      prompt.showToast({ duration: 2000, message: "Please input channel name."})
+      return
+    }
+    if(this.uid === "") {
+      prompt.showToast({ duration: 2000, message: "Please input user id."})
+      return
+    }
+
+    this.InitRtcEngine()
+    let ret = SDK.getInstance().startPushStreaming({ cname: this.cname, uid: this.uid })
     if(ret != NERtcConstants.ErrorCode.NO_ERROR) {
       this.joinRoomDialog.close()
-      prompt.showToast({ message: 'Join channel failed, result: ' + ret, duration: 2000 })
+      prompt.showToast({ message: '融合推流失败, result: ' + ret, duration: 2000 })
     }
+  }
+
+  private StartPullStream = (): void => {
+    router.pushUrl({ url: 'pages/LowLatency' }, err => {
+      if(err) {
+        prompt.showToast({ message: 'turn to settings failed.', duration: 2000 })
+      }
+      console.info(this.TAG, 'turn to settings success.')
+    })
   }
 
   transToChat(): void {

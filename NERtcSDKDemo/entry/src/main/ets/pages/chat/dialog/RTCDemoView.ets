@@ -6,10 +6,12 @@ import Logic from '../Presenter1';
 export struct RTCDemoView {
 
   private TAG: string = "RTCDemoView"
+  private useExternal: boolean = Logic.getInstance().isExternalRender()
 
   rtcViewId: string = ""
   local: boolean = false
   attach?: () => void;
+  detach?: () => void;
   snapshot?: () => void;
   mirror?:() => void;
   scaleMode?:() => void;
@@ -56,20 +58,38 @@ export struct RTCDemoView {
   }
 
   build() {
-      NERtcVideoView({
-        canvasId: this.rtcViewId,
-        radius: Logic.getInstance().GetCanvasBorderRadius(),
-        onLoad: (() => {
-          if(this.attach) {
-            this.attach()
-          }
-        }),
-        onDestroy: (() => {
-          console.info(this.TAG, `id:${this.rtcViewId} surface release.`)
-        })
-      }).gesture(LongPressGesture({repeat: false})
-        .onAction(() => {
-          this.canvasLongPressDialog?.open()
+      if(!this.useExternal) {
+        NERtcVideoView({
+          canvasId: this.rtcViewId,
+          radius: Logic.getInstance().GetCanvasBorderRadius(),
+          onLoad: (() => {
+            if(this.attach) {
+              this.attach()
+            }
+          }),
+          onDestroy: (() => {
+            console.info(this.TAG, `id:${this.rtcViewId} surface release.`)
+          })
+        }).gesture(LongPressGesture({repeat: false})
+          .onAction(() => {
+            this.canvasLongPressDialog?.open()
+          }))
+      } else {
+        XComponent({ id: this.rtcViewId, type: XComponentType.SURFACE, libraryname: 'dataprocessing'})
+          .borderRadius(Logic.getInstance().GetCanvasBorderRadius())
+          .onLoad(() => {
+            if(this.attach) {
+              this.attach()
+            }
+          })
+          .onDestroy(() => {
+            console.info(this.TAG, `id:${this.rtcViewId} surface release.`)
+            if (this.detach) {
+              this.detach()
+            }
+          }).gesture(LongPressGesture({repeat: false}).onAction(() => {
+            this.canvasLongPressDialog?.open()
         }))
+      }
   }
 }

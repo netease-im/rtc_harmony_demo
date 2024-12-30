@@ -7,6 +7,7 @@ import { Prompt } from '@kit.ArkUI';
 import { MoreFunction } from './chat/dialog/MoreFunction';
 import { RTCDemoView } from './chat/dialog/RTCDemoView';
 import * as model from '../pages/chat/ChatModel'
+import LiveStreamingKit from './LiveStreamingKit';
 
 @Entry
 @Component
@@ -20,6 +21,11 @@ struct Chat {
         .onClick(() => {
            this.uiType = UI.VIDEO
            this.showMoreFunction = true
+        })
+      MenuItem({ content: '多流', startIcon: $r('app.media.video_multi')})
+        .onClick(() => {
+          this.uiType = UI.VIDEO_MULTI
+          this.showMoreFunction = true
         })
       MenuItem({ content: '音频', startIcon: $r('app.media.audio_common')})
         .onClick(() => {
@@ -35,13 +41,18 @@ struct Chat {
   }
 
   private TAG: string = "MultiChat"
+  private preChannel: string = 'Channel-'
   @State users: Array<DemoUser> = [];
-  @State title: string = "Channel-"
-  @State callDetail: string = ''
+  @State title: string = this.preChannel
   @State showMoreFunction: boolean = false
   @State localVolumeInfo: LocalVolumeInfo|null = null
   @State remoteVolumeInfos: RemoteVolumeInfo[]|null = null
-  private pendingResetParams: boolean = false;
+  @State localVideoStats: Map<number, string>|null = null
+  @State localAudioStats: string = ''
+  @State localRtcStats: string = ''
+  @State roomNetworkQuality: Map<bigint, string>|null = null
+  @State remoteVideoStats: Map<bigint, Map<number, string>>|null = null
+  @State remoteAudioStats: Map<bigint, string>|null = null
 
   private getRemoteVolumeIndication(item: DemoUser): RemoteVolumeInfo|null {
     if(!this.remoteVolumeInfos)
@@ -66,9 +77,9 @@ struct Chat {
       try {
         index = this.users.findIndex(user => {
           if(obj instanceof DemoUser) {
-            return user.uid === obj['uid']
+            return user.uid === obj['uid'] && user.multiStream == obj.multiStream;
           } else {
-            return user.uid === obj.get('uid')
+            return user.uid === obj.get('uid');
           }
         })
       } catch (e) {
@@ -87,7 +98,7 @@ struct Chat {
           } break;
         case OPERATOR.DEL: {
             if(index >= 0) {
-              this.users = this.users.filter(user => user.uid !== obj['uid'])
+              this.users = this.users.filter(user => (user.uid !== obj['uid'] || user.multiStream !== obj['multiStream']))
             }
           } break;
         case OPERATOR.UPD: {
@@ -111,10 +122,6 @@ struct Chat {
       Prompt.showToast({ message: errMsg, duration: 2000 })
     },
 
-    detail: (msg: string): void => {
-      this.callDetail = msg
-    },
-
     localVolume: (volumeInfo: LocalVolumeInfo): void => {
       this.localVolumeInfo = volumeInfo
     },
@@ -122,6 +129,34 @@ struct Chat {
     remoteVolume: (volumeInfo: RemoteVolumeInfo[], totalVolume: number): void => {
       this.remoteVolumeInfos = volumeInfo
     },
+
+    changeTitle: (cname: string): void => {
+      this.title = this.preChannel + cname
+    },
+
+    localVideoStats: (stats: Map<number, string>): void => {
+      this.localVideoStats = stats
+    },
+
+    localAudioStats :(stat: string): void => {
+      this.localAudioStats = stat
+    },
+
+    localRtcStats :(stat: string): void => {
+      this.localRtcStats = stat
+    },
+
+    roomNetWorkQuality :(infos: Map<bigint, string>): void => {
+      this.roomNetworkQuality = infos
+    },
+
+    remoteVideoStats :(stats: Map<bigint, Map<number, string>>): void => {
+      this.remoteVideoStats = stats
+    },
+
+    remoteAudioStats: (stats: Map<bigint, string>): void => {
+      this.remoteAudioStats = stats
+    }
   }
 
   aboutToAppear(): void {
@@ -137,14 +172,6 @@ struct Chat {
     this.users[0] = local
   }
 
-  onPageShow() {
-    if(this.pendingResetParams) {
-      Prompt.showToast({ message: '重置参数'})
-      this.pendingResetParams = false
-      ChatPresenter.getInstance().resetParams(getContext())
-    }
-  }
-
   onBackPress(): boolean | void {
 
     if(this.showMoreFunction) {
@@ -154,7 +181,15 @@ struct Chat {
 
     console.info(this.TAG, '==== Chat page backpress ===')
     ChatPresenter.getInstance().removeDelegate(this.uiDelegate)
-    ChatPresenter.getInstance().leave()
+    if(ChatPresenter.getInstance().getType() == 0)
+      ChatPresenter.getInstance().leave()
+    else if(ChatPresenter.getInstance().getType() == 1) {
+      if(LiveStreamingKit.getInstance().getPKState() == LiveStreamingKit.kPKStateIdle && LiveStreamingKit.getInstance().getSeatState() == LiveStreamingKit.kSeatStateStateIdle)
+        ChatPresenter.getInstance().stopPushStreaming()
+      else
+        LiveStreamingKit.getInstance().clearPKAndSeat()
+      console.log("liveStreamKit stopPushStreaming")
+    }
     ChatPresenter.getInstance().enableVideo(false)
   }
 
@@ -179,12 +214,16 @@ struct Chat {
                     Stack({ alignContent: Alignment.BottomEnd }) {
                       RTCDemoView(
                         {
-                          rtcViewId: item.xComponentIdMain,
+                          rtcViewId: item.multiStream == null ? item.xComponentIdMain : (item.multiStream == "third" ? item.xComponentIdThird : item.xComponentIdFourth ),
                           local: this.users[0].uid === item.uid,
                           attach: () => {
-                            console.info(this.TAG, `View:${item.xComponentIdMain} surface create.`)
-                            let user = this.users.find(user => user.uid == item.uid)
-                            if(user) ChatPresenter.getInstance().attach(user)
+                            console.info(this.TAG, `View:${item.multiStream} surface create.`)
+                            let user = this.users.find(user => user.uid == item.uid && user.multiStream == item.multiStream)
+                            if(user) ChatPresenter.getInstance().attach(user, user.multiStream)
+                          },
+                          detach: () => {
+                            let user = this.users.find(user => user.uid == item.uid && user.multiStream == item.multiStream)
+                            if(user) ChatPresenter.getInstance().detach(user, user.multiStream)
                           },
                           snapshot: () => {
                             item.turnToMainStream()
@@ -236,41 +275,113 @@ struct Chat {
                         .width('100%')
                         .fontColor(Color.White)
                         .textAlign(TextAlign.Start)
+                        .fontSize(14)
                         .margin(5)
 
+                      /**
+                       * === local ===
+                       */
                       if(item.local && this.localVolumeInfo) {
                         Text(`麦克风音量:${this.localVolumeInfo?.volume ?? '0'}, vadFlag:${this.localVolumeInfo?.vad ?? '0'}`)
                           .width('100%')
-                          .fontSize(12)
+                          .fontSize(10)
                           .fontColor(Color.Red)
                           .textAlign(TextAlign.Start)
-                          .margin(5)
+                          .margin(2)
                       }
 
+                      if (item.local && !item.multiStream && this.localVideoStats) {
+                        Text(this.localVideoStats.get(0)).width('100%').fontSize(10).fontColor(Color.Red)
+                          .textAlign(TextAlign.Start)
+                          .margin(2)
+                      }
+
+                      if (item.local && item.multiStream == 'third' && this.localVideoStats) {
+                        Text(this.localVideoStats.get(1)).width('100%').fontSize(10).fontColor(Color.Red)
+                          .textAlign(TextAlign.Start)
+                          .margin(2)
+                      }
+
+                      if (item.local && item.multiStream == 'fourth' && this.localVideoStats) {
+                        Text(this.localVideoStats.get(2)).width('100%').fontSize(10).fontColor(Color.Red)
+                          .textAlign(TextAlign.Start)
+                          .margin(2)
+                      }
+
+                      if (item.local && this.localAudioStats) {
+                        Text(this.localAudioStats).width('100%').fontSize(10).fontColor(Color.Blue)
+                          .textAlign(TextAlign.Start)
+                          .margin(2)
+                      }
+
+                      if (item.local && this.localRtcStats) {
+                        Text(this.localRtcStats).width('100%').fontSize(10).fontColor(Color.Green)
+                          .textAlign(TextAlign.Start)
+                          .margin(2)
+                      }
+
+                      if (item.local && this.roomNetworkQuality) {
+                        Text(this.roomNetworkQuality.get(item.uid)).width('100%').fontSize(10).fontColor(Color.Yellow)
+                          .textAlign(TextAlign.Start)
+                          .margin(2)
+                      }
+
+                      /**
+                       * === remote ===
+                       */
                       // 这里偷下懒，可以默认将 this.localVolumeInfo 看作用户是否有开启音量回调
                       if(!item.local && this.localVolumeInfo) {
                         Text(`麦克风音量:${this.getRemoteVolumeIndication(item)?.volume ?? '0'}`)
                           .width('100%')
-                          .fontSize(12)
+                          .fontSize(10)
                           .fontColor(Color.Red)
                           .textAlign(TextAlign.Start)
                           .margin(5)
                       }
+
+                      if (!item.local && item.multiStream == null && this.remoteVideoStats) {
+                        Text(this.remoteVideoStats.get(item.uid)?.get(0)).width('100%').fontSize(10).fontColor(Color.Red)
+                          .textAlign(TextAlign.Start)
+                          .margin(2)
+                      }
+
+                      if (!item.local && item.multiStream == 'third' && this.remoteVideoStats) {
+                        Text(this.remoteVideoStats.get(item.uid)?.get(1)).width('100%').fontSize(10).fontColor(Color.Red)
+                          .textAlign(TextAlign.Start)
+                          .margin(2)
+                      }
+
+                      if (!item.local && item.multiStream == 'fourth' && this.remoteVideoStats) {
+                        Text(this.remoteVideoStats.get(item.uid)?.get(2)).width('100%').fontSize(10).fontColor(Color.Red)
+                          .textAlign(TextAlign.Start)
+                          .margin(2)
+                      }
+
+                      if (!item.local && this.remoteAudioStats) {
+                        Text(this.remoteAudioStats.get(item.uid)).width('100%').fontSize(10).fontColor(Color.Blue)
+                          .textAlign(TextAlign.Start)
+                          .margin(2)
+                      }
+
+                      if (!item.local && this.roomNetworkQuality) {
+                        Text(this.roomNetworkQuality.get(item.uid)).width('100%').fontSize(10).fontColor(Color.Yellow)
+                          .textAlign(TextAlign.Start)
+                          .margin(2)
+                      }
+
                     }
                   }
                 }.width('50%').height(250).margin({top: 10})
               }, (item: DemoUser) => item.generatorId())
             }.width('100%').height('100%').cachedCount(4).columnsGap(15).columnsTemplate('1fr 1fr')
             if(this.showMoreFunction) {
-              MoreFunction({ callDetail: $callDetail, uiType: $uiType, turnToSetting: () => {
+              MoreFunction({ uiType: $uiType, turnToSetting: () => {
                 let setting: model.SettingInfo = {
                   reInit: false
                 }
                 router.pushUrl({ url: 'pages/Settings', params: setting }, err => {
                   if(err) {
                     Prompt.showToast({ message: `turn to setting failed, err:${err.message}`})
-                  } else {
-                    this.pendingResetParams = true
                   }
                 })
               }})

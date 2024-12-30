@@ -1,9 +1,8 @@
 import { NERtcConstants, NERtcSDK, NERtcCallbackEx} from '@nertc/nertc_sdk/Index';
 
 import { NERtcPacketObserver} from '@nertc/nertc_sdk';
-import Config from '../../common/Config';
 import DemoUser from '../../model/DemoUser';
-import { ChatState, DemoLogicMap, LocalVolumeInfo, LoginInfo } from './ChatModel';
+import { ChatState, LoginInfo } from './ChatModel';
 import UIDelegate, { OPERATOR } from './Delegate';
 import ExternalOpusSource from '../../external/ExternalOpusSource';
 import { Product } from '../../model/common'
@@ -11,7 +10,7 @@ import PushExternalH264Video from '../../external/ExternalH264Source1';
 import fs from '@ohos.file.fs';
 import { RtcDemoAudioFrameObserver, RtcDemoVideoFrameObserver } from '../../common/RtcDemoCallback';
 import { preferences } from '@kit.ArkData';
-import Prompt from '@system.prompt';
+import Prompt from '@ohos.promptAction';
 import image from '@ohos.multimedia.image'
 import { systemDateTime } from '@kit.BasicServicesKit';
 import backgroundTaskManager from '@ohos.resourceschedule.backgroundTaskManager';
@@ -22,20 +21,17 @@ import { ExternalPcmSource } from '../../external/ExternalPcmSource';
 import { ExternalYuvVideoSource } from '../../external/ExternalYuvVideoSource';
 import { DemoNERtcPackageObserver } from './PackageObserver';
 import { DemoNERtcPreDecodeObserver } from './PreDecodeObserver';
-import { VideoModel, OtherModel, AudioModel, DumpModel, AudioEffectModel } from '../settings/model/common';
+import { VideoCaptureProcessing, VideoRenderProcessing } from 'libdataprocessing.so'
+import { util } from '@kit.ArkTS';
+import LiveStreamingKit from '../LiveStreamingKit';
+import * as ModelUtil from './ModelHandleUtils'
+import RtcLogicDelegate from './RtcDefaultCallbackEx'
+import RtcLogicModel from './RtcLogicModel'
 
-let state_: ChatState = ChatState.CHAT_IDLE
 let TAG: string = 'MultiChat'
-let delegates_: Array<UIDelegate> = []
 let login_: LoginInfo;
 
-export let gAudioModel: AudioModel
-export let gVideoModel: VideoModel
-export let gOtherModel: OtherModel
-export let gDumpModel: DumpModel
-export let gAudioEffectModel: AudioEffectModel
-
-export default class ChatPresenter extends NERtcCallbackEx {
+export default class ChatPresenter {
 
   private static instance: ChatPresenter = new ChatPresenter()
   private audioEncodedSource?: ExternalOpusSource
@@ -45,10 +41,13 @@ export default class ChatPresenter extends NERtcCallbackEx {
   private videoEncodedSource?: PushExternalH264Video
   //外部辅流码流
   private videoSubEncodedSource?: PushExternalH264Video
+  //第三流码流
+  private videoThirdEncodedSource?: PushExternalH264Video
+  //第四流码流
+  private videoFourthEncodedSource?: PushExternalH264Video
 
   private preObserver?: DemoNERtcPreDecodeObserver|null
   private dir?: string
-  private localUser: DemoUser|null = null
   private av_session: avSession.AVSession|null = null;
 
   //主流外部输入
@@ -59,146 +58,35 @@ export default class ChatPresenter extends NERtcCallbackEx {
   private externalAudioSourceSub: ExternalPcmSource|null = null
   private externalVideoSourceSub: ExternalYuvVideoSource| null = null
 
+  //第三流外部输入
+  private externalVideoSourceThird: ExternalYuvVideoSource| null = null
+
+  //第四流外部输入
+  private externalVideoSourceFourth: ExternalYuvVideoSource| null = null
+
   private audioFrameObserver: RtcDemoAudioFrameObserver = new RtcDemoAudioFrameObserver(TAG);
   private isAudioFrameObserverEnabled: boolean = false;
   private videoFrameObserver: RtcDemoVideoFrameObserver = new RtcDemoVideoFrameObserver(TAG);
   private isVideoFrameObserverEnabled: boolean = false;
 
-  onJoinChannel(result: number, channelId: bigint, elapsed: bigint, uid: bigint): void {
-    state_ = result == NERtcConstants.ErrorCode.NO_ERROR ? ChatState.CHAT_ED : ChatState.CHAT_IDLE;
-    if (state_ == ChatState.CHAT_ED) {
-      delegates_?.forEach(delegate_ => {
-        if (!this.localUser) {
-          this.localUser = new DemoUser(uid, true);
-        }
-        delegate_?.update(OPERATOR.ADD, this.localUser);
-      });
-      setTimeout(() => {
-        if (gAudioModel) {
-          let ret: number = NERtcSDK.getInstance().enableLocalAudio(gAudioModel.autoOpenAudio);
-          console.info(TAG, 'EnableLocalAudio: ' + ret);
-        }
-        if (gVideoModel) {
-          this.enableVideo(gVideoModel.autoEnableVideo);
-        }
-        this.enableSpeakerOn(true);
-      });
-    } else {
-      delegates_?.forEach(delegate_ => {
-        delegate_?.error('Join channel failed, result:' + result);
-      });
-    }
-  }
+  //前处理 native object.
+  private videoProcess: VideoCaptureProcessing|null = null
+  //外部渲染 native object.
+  private videoRender: VideoRenderProcessing|null = null
 
-  onLeaveChannel(result: number): void {
-    state_ = ChatState.CHAT_IDLE;
-    delegates_.forEach(delegate_ => {
-      if (this.localUser) {
-        delegate_?.update(OPERATOR.DEL, this.localUser);
-      }
-    });
-  }
+  //SEI
+  private seiIndex: number = 1
+  private type: number = 0 //0:普通入房 1:融合推流
 
-  onUserJoined(uid: bigint, extraInfo?: NERtcConstants.NERtcUserJoinExtraInfo | undefined): void {
-    delegates_?.forEach(delegate_ => {
-      let user = new DemoUser(uid);
-      delegate_?.update(OPERATOR.ADD, user);
-    });
-  }
 
-  onUserLeave(uid: bigint, reason: number, extraInfo?: NERtcConstants.NERtcUserLeaveExtraInfo | undefined): void {
-    delegates_?.forEach(delegate_ => {
-      let user = new DemoUser(uid);
-      delegate_?.update(OPERATOR.DEL, user);
-    });
-  }
+  private pushAddressArray: string[] = ["rtmp://pd3ab725c.live.126.net/live/8e79fc0763174fd28ee70e786da7d404?wsSecret=4293eb4624811a854e9abcee760f6ea6&wsTime=1684825921",
+  "rtmp://p21058434.live.126.net/live/3a42421848534290908190606cb69d5a?wsSecret=fbc1224f7a3fd63db3584eb0aa6dad81&wsTime=1684825865",
+  "rtmp://pb6a1a684.live.126.net/live/892d0c580f9e44b89a65b5aa38550899?wsSecret=e302be5b55a2d28ba70401f48a42a72a&wsTime=1690198587",
+  "rtmp://p13b79799.live.126.net/live/6356956ec4fc4e119352ecfad3e39c43?wsSecret=78914026fc11ae61a4d4cd267da47231&wsTime=1714116210",
+  "rtmp://pf731f1c7.live.126.net/live/0c8c32bc4a09478ebbc834084092af07?wsSecret=610cbb44de7463c5249bea80f6bef633&wsTime=1714118848"]
 
-  onUserAudioStart(uid: bigint): void {}
-
-  onUserAudioStop(uid: bigint): void {}
-
-  onUserVideoStart(uid: bigint, maxProfile: NERtcConstants.NERtcVideoProfileType): void {}
-
-  onUserVideoStop(uid: bigint): void {}
-
-  onDisconnect(reason: number): void {}
-
-  onClientRoleChange(oldRole: number, newRole: number): void {}
-
-  onRecvSEIMsg(userId: bigint, data: Uint8Array, dataSize: number): void {}
-
-  onFirstAudioFrameDecoded(uid: bigint): void {
-    Prompt.showToast({
-      message: `onFirstAudioFrameDecoded, uid:${uid}`
-    });
-  }
-
-  onFirstVideoFrameDecoded(streamType: NERtcConstants.NERtcVideoStreamType, userId: bigint, width: number, height: number): void {
-    Prompt.showToast({
-      message: `onFirstVideoFrameDecoded, streamType:${streamType}, uid:${userId}, width:${width}, height:${height}`
-    });
-  }
-
-  onUserSubStreamVideoStart(uid: bigint, maxProfile: NERtcConstants.NERtcVideoProfileType): void {
-    delegates_?.forEach(delegate_ => {
-      let canvasId = DemoUser.GeneratorSubCanvasId(uid);
-      let obj: Map<string, Object | undefined> = new Map;
-      obj.set('uid', uid);
-      obj.set('xComponentIdSub', canvasId);
-      delegate_?.update(OPERATOR.UPD, obj);
-    });
-  }
-
-  onUserSubStreamVideoStop(uid: bigint): void {
-    delegates_?.forEach(delegate_ => {
-      let obj: DemoLogicMap = new Map;
-      obj.set('uid', uid);
-      obj.set('xComponentIdSub', undefined);
-      delegate_?.update(OPERATOR.UPD, obj);
-    });
-  }
-
-  onLocalAudioVolumeIndication(volume: number, vadFlag: boolean): void {
-    delegates_?.forEach(delegate_ => {
-      if (delegate_.localVolume) {
-        delegate_.localVolume({
-          volume: volume, vad: vadFlag
-        });
-      }
-    });
-  }
-
-  onRemoteAudioVolumeIndication(volumeInfo: NERtcConstants.NERtcAudioVolumeInfo[], totalVolume: number): void {
-    delegates_?.forEach(delegate_ => {
-      if (delegate_.remoteVolume) {
-        delegate_.remoteVolume(volumeInfo, totalVolume);
-      }
-    });
-  }
-
-  onLastmileProbeResult(result: NERtcConstants.NERtcProbeResult): void {
-    delegates_?.forEach(delegate_ => {
-      if(delegate_.networkQuality) {
-        delegate_.networkQuality(null, result)
-      }
-    })
-  }
-  onLabFeatureCallback(key: string, param: Object): void {
-  }
-  onLastmileQuality(quality: number): void {
-    delegates_?.forEach(delegate_ => {
-      if(delegate_.networkQuality) {
-        delegate_.networkQuality(quality, null)
-      }
-    })
-  }
-
-  onVirtualBackgroundSourceEnabled(enabled: boolean, reason: number): void {
-    console.info(TAG, `onVirtualBackgroundSourceEnabled, enabled:${enabled}, reason:${reason}`);
-    Prompt.showToast({
-      message: `onVirtualBackgroundSourceEnabled, enabled:${enabled}, reason:${reason}` , duration: 3000
-    });
-  }
+  private rtcDemoLogicModel: RtcLogicModel = new RtcLogicModel()
+  private rtcDemoLogicDelegate: RtcLogicDelegate = new RtcLogicDelegate(this.rtcDemoLogicModel)
 
   static getInstance(): ChatPresenter {
     return ChatPresenter.instance
@@ -209,24 +97,15 @@ export default class ChatPresenter extends NERtcCallbackEx {
     console.info(TAG, 'Set Dir: ' + dir)
   }
 
+  getType() {
+    return this.type;
+  }
   setDelegate(delegate: UIDelegate) {
-
-    if(delegates_.indexOf(delegate) !== -1) {
-      console.info(TAG, 'delegate is exits.')
-    } else {
-      delegates_?.push(delegate)
-      console.info(TAG, 'setDelegate size: ' + delegates_.length)
-    }
+    this.rtcDemoLogicModel.SetDelegate(delegate)
   }
 
   removeDelegate(delegate: UIDelegate) {
-
-    let index = delegates_.indexOf(delegate)
-    if(index !== -1) {
-      delegates_.splice(index, 1)
-    } else {
-      console.info(TAG, 'delegate not found.')
-    }
+    this.rtcDemoLogicModel.RemoveDelegate(delegate)
   }
 
   enableBackgroundRunning(enable:boolean): void {
@@ -239,11 +118,15 @@ export default class ChatPresenter extends NERtcCallbackEx {
     }
   }
 
+  GetLogicDataModel(): RtcLogicModel {
+    return this.rtcDemoLogicModel
+  }
+
   resetParams(context: Context): void {
-    this.loadModel(context)
-    this.before()
-    this.after()
-    this.extend()
+    this.rtcDemoLogicModel.LoadDataModel(context)
+    this.beforeInitEngineTask()
+    this.afterInitEngineTask()
+    this.extendInitEngineTask()
   }
 
   createAVSession(): void {
@@ -303,206 +186,295 @@ export default class ChatPresenter extends NERtcCallbackEx {
     });
   }
 
-  init(context: Context) {
-    this.loadModel(context)
 
-    this.before()
+  init(context: Context) {
+    this.rtcDemoLogicModel.LoadDataModel(context)
+    this.beforeInitEngineTask()
     let option: NERtcConstants.NERtcOption = { logLevel: NERtcConstants.LogLevel.INFO }
-    NERtcSDK.getInstance().init(context, Config.APP_KEY_DEBUG, this, option)
-    this.after()
+    const appKey = this.rtcDemoLogicModel.GetDemoAppKey()
+
+    //**** 私有化设置 ****
+    const privateAddress = this.rtcDemoLogicModel.GetPrivateAddress()
+    if (privateAddress != null) {
+      option.serverAddress = privateAddress
+    }
+
+    NERtcSDK.getInstance().init(context, appKey, this.rtcDemoLogicDelegate, option)
+    this.afterInitEngineTask()
   }
 
-  private loadModel(context: Context) {
-    let options: preferences.Options = { name: 'netease_settings' }
-    let data = preferences.getPreferencesSync(context, options)
-
-    let localAudioData = data.getSync('audioData', '') as string
-    let localVideoData = data.getSync('videoData', '') as string
-    let localOtherData = data.getSync('otherData', '') as string
-    let localDumpData = data.getSync('dumpData', '') as string
-    let localAudioEffectData = data.getSync('audioEffectData', '') as string
-
-    try {
-      gAudioModel = JSON.parse(localAudioData)
-      gVideoModel = JSON.parse(localVideoData)
-      gOtherModel = JSON.parse(localOtherData)
-      gDumpModel = JSON.parse(localDumpData)
-      gAudioEffectModel = JSON.parse(localAudioEffectData)
-    } catch (e) {
-      console.info(TAG, JSON.stringify(e))
-      gAudioModel = new AudioModel()
-      gVideoModel = new VideoModel()
-      gOtherModel = new OtherModel()
-      gDumpModel = new DumpModel()
-      gAudioEffectModel = new AudioEffectModel()
+  triggerCaptionMode(captionMode: boolean) {
+    if(captionMode) {
+      const otherModel = this.rtcDemoLogicModel.GetPreferenceOtherModel()
+      let config: NERtcConstants.NERtcASRCaptionConfig = {
+        src_language: otherModel.captionSource, dst_language: otherModel.captionDest
+      }
+      NERtcSDK.getInstance().startASRCaption(config)
+    }else{
+      NERtcSDK.getInstance().stopASRCaption()
     }
   }
-  triggerCaptionMode(captionMode: boolean) {
-    let param: object = new Object();
-    param["sdk.enable.asr.caption"] = captionMode
-    param["sdk.asr.caption.src.language"] = gOtherModel.captionSource
-    param["sdk.asr.caption.dst.language"] = gOtherModel.captionDest
-    NERtcSDK.getInstance().setParameters(param)
 
-    param["sdk.private.api.request.asr.caption"] = ''
-    NERtcSDK.getInstance().setParameters(param)
-  }
-  private before = (): void => {
+  private beforeInitEngineTask = (): void => {
     let param: object = new Object();
+    const audioMode = this.rtcDemoLogicModel.GetPreferenceAudioModel()
+    const videoMode = this.rtcDemoLogicModel.GetPreferenceVideoModel()
+    const otherMode = this.rtcDemoLogicModel.GetPreferenceOtherModel()
+
     //设置SDK日志是否加密，调试阶段关闭，上线阶段打开
     param["sdk.enable.encrypt.log"] = false;
-    if(gAudioModel) {
-      param[NERtcConstants.NERtcParameterKey.kNERtcKeyAutoSubscribeAudio] = gAudioModel.autoSubAudio
+    if (audioMode) {
+      param[NERtcConstants.NERtcParameterKey.kNERtcKeyAutoSubscribeAudio] = audioMode.autoSubAudio
     }
-    if(gVideoModel) {
-      param[NERtcConstants.NERtcParameterKey.kNERtcKeyStartVideoWithBackCamera] = !gVideoModel.fontCamera
+    if (videoMode) {
+      param[NERtcConstants.NERtcParameterKey.kNERtcKeyStartVideoWithBackCamera] = !videoMode.fontCamera
 
-      if(gVideoModel.encodeMode == 0 || gVideoModel.encodeMode == 1) {
+      if (videoMode.encodeMode == 0 || videoMode.encodeMode == 1) {
         param[NERtcConstants.NERtcParameterKey.kNERtcKeyVideoEncodeMode] = 0
       } else {
         param[NERtcConstants.NERtcParameterKey.kNERtcKeyVideoEncodeMode] = 1
       }
 
-      if(gVideoModel.decodeMode == 0 || gVideoModel.decodeMode == 1) {
+      if (videoMode.decodeMode == 0 || videoMode.decodeMode == 1) {
         param[NERtcConstants.NERtcParameterKey.kNERtcKeyVideoDecodeMode] = 0
       } else {
         param[NERtcConstants.NERtcParameterKey.kNERtcKeyVideoDecodeMode] = 1
       }
 
-      param[NERtcConstants.NERtcParameterKey.kNERtcKeyVideoSendMode] = gVideoModel.publishStreamType
-      param[NERtcConstants.NERtcParameterKey.kNERtcKeyAutoSubscribeVideo] = gVideoModel.autoSubVideo
+      param[NERtcConstants.NERtcParameterKey.kNERtcKeyVideoSendMode] = videoMode.publishStreamType
+      param[NERtcConstants.NERtcParameterKey.kNERtcKeyAutoSubscribeVideo] = videoMode.autoSubVideo
     }
 
-    if(gOtherModel) {
-      param[NERtcConstants.NERtcParameterKey.kNERtcKeyServerRecordSpeaker] = gOtherModel.recordSpeaker
-      param[NERtcConstants.NERtcParameterKey.kNERtcKeyServerRecordAudio] = gOtherModel.audioRecord
-      param[NERtcConstants.NERtcParameterKey.kNERtcKeyServerRecordVideo] = gOtherModel.videoRecord
-      param[NERtcConstants.NERtcParameterKey.kNERtcKeyServerRecordMode] = gOtherModel.recordMode
+    if (otherMode) {
+      param[NERtcConstants.NERtcParameterKey.kNERtcKeyServerRecordSpeaker] = otherMode.recordSpeaker
+      param[NERtcConstants.NERtcParameterKey.kNERtcKeyServerRecordAudio] = otherMode.audioRecord
+      param[NERtcConstants.NERtcParameterKey.kNERtcKeyServerRecordVideo] = otherMode.videoRecord
+      param[NERtcConstants.NERtcParameterKey.kNERtcKeyServerRecordMode] = otherMode.recordMode
+
+      if (otherMode.loginTimeOutTime > 0)
+        param['sdk.join.max.time.out'] = otherMode.loginTimeOutTime
+
+      //gop
+      if (otherMode.gop != "") {
+        param["sdk.cdn.gop"] = Number(otherMode.gop);
+
+        //私有参数
+        const privateParam = otherMode.privateParamSetting.trim()
+        if (privateParam !== '') {
+          ModelUtil.injectJsonValue(param, privateParam)
+        }
+      }
+
+      NERtcSDK.getInstance().setParameters(param)
     }
-    if(gOtherModel.captionMode) {
-      param["sdk.enable.asr.caption"] = gOtherModel.captionMode
-      param["sdk.asr.caption.src.language"] = gOtherModel.captionSource
-      param["sdk.asr.caption.dst.language"] = gOtherModel.captionDest
-    }
-    NERtcSDK.getInstance().setParameters(param)
   }
 
-  private after = (): void => {
-    // setTimeout(() => { // 临时的bug，后面去掉
-      if(gAudioModel) {
-        NERtcSDK.getInstance().setAudioProfile(gAudioModel.audioProfile, gAudioModel.audioScenario)
-        NERtcSDK.getInstance().adjustRecordingSignalVolume(gAudioModel.recordVolume)
-        NERtcSDK.getInstance().adjustPlaybackSignalVolume(gAudioModel.playoutVolume)
-        // 回调
-        if (this.isAudioFrameObserverEnabled != gAudioModel.enableFrameObserver) {
-          this.isAudioFrameObserverEnabled = gAudioModel.enableFrameObserver;
-          this.enableAudioFrameObserver(gAudioModel.enableFrameObserver);
+  private afterInitEngineTask = (): void => {
+
+    const audioModel = this.rtcDemoLogicModel.GetPreferenceAudioModel()
+    const otherModel = this.rtcDemoLogicModel.GetPreferenceOtherModel()
+    const videoModel = this.rtcDemoLogicModel.GetPreferenceVideoModel()
+    const multiVideoModel = this.rtcDemoLogicModel.GetPreferenceMultiVideoModel()
+
+    if (audioModel) {
+      NERtcSDK.getInstance().setAudioProfile(audioModel.audioProfile, audioModel.audioScenario)
+      NERtcSDK.getInstance().adjustRecordingSignalVolume(audioModel.recordVolume)
+      NERtcSDK.getInstance().adjustPlaybackSignalVolume(audioModel.playoutVolume)
+    }
+
+    if (otherModel.captionMode) {
+      let config: NERtcConstants.NERtcASRCaptionConfig = {
+        src_language: otherModel.captionSource, dst_language: otherModel.captionDest
+      }
+      NERtcSDK.getInstance().startASRCaption(config)
+    } else {
+      NERtcSDK.getInstance().stopASRCaption()
+    }
+
+    if (videoModel) {
+      //是否开启小流
+      NERtcSDK.getInstance().enableDualStreamMode(videoModel.mainEnableDualStream)
+      if (multiVideoModel) {
+        NERtcSDK.getInstance().enableDualStreamMode(multiVideoModel.thirdEnableDualStream)
+        NERtcSDK.getInstance().enableDualStreamMode(multiVideoModel.fourthEnableDualStream)
+      }
+
+      //主流设置
+      let configMain: NERtcConstants.NERtcVideoEncodeConfiguration = new NERtcConstants.NERtcVideoEncodeConfiguration
+      configMain.maxProfile = videoModel.mainSendResolution
+      configMain.degradationPreference = videoModel.mainEncodeFrameMode
+      configMain.framerate = this.translateFrameRate(videoModel.mainEncodeFrameRate)
+      configMain.cropMode = videoModel.mainCropMode
+      configMain.mirrorMode = videoModel.mainMirrorMode
+
+      let ret: number = NERtcSDK.getInstance().setLocalVideoConfig(configMain, NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeMain)
+      console.info(TAG, `set main localVideoConfig ret:${ret}, config:${JSON.stringify(configMain)}`)
+
+      //第三流设置
+      let configThird: NERtcConstants.NERtcVideoEncodeConfiguration = new NERtcConstants.NERtcVideoEncodeConfiguration
+      configThird.maxProfile = multiVideoModel.thirdSendResolution
+      configThird.degradationPreference = multiVideoModel.thirdEncodeFrameMode
+      configThird.framerate = this.translateFrameRate(multiVideoModel.thirdEncodeFrameRate)
+      configThird.cropMode = multiVideoModel.thirdCropMode
+      configThird.mirrorMode = multiVideoModel.thirdMirrorMode
+
+      ret = NERtcSDK.getInstance().setLocalVideoConfig(configThird, NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeThird)
+      console.info(TAG, `set third localVideoConfig ret:${ret}, config:${JSON.stringify(configThird)}`)
+
+      //第四流设置
+      let configFourth: NERtcConstants.NERtcVideoEncodeConfiguration = new NERtcConstants.NERtcVideoEncodeConfiguration
+      configFourth.maxProfile = multiVideoModel.fourthSendResolution
+      configFourth.degradationPreference = multiVideoModel.fourthEncodeFrameMode
+      configFourth.framerate = this.translateFrameRate(multiVideoModel.fourthEncodeFrameRate)
+      configFourth.cropMode = multiVideoModel.fourthCropMode
+      configFourth.mirrorMode = multiVideoModel.fourthMirrorMode
+
+      ret = NERtcSDK.getInstance().setLocalVideoConfig(configFourth, NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeFourth)
+      console.info(TAG, `set fourth localVideoConfig ret:${ret}, config:${JSON.stringify(configFourth)}`)
+
+      //设置主流capture.
+      {
+        let captureWidth = videoModel.mainCaptureWidth
+        let captureHeight = videoModel.mainCaptureHeight
+
+        if(captureWidth != 0 && captureHeight != 0) {
+          NERtcSDK.getInstance().setCameraCaptureConfig({ width: captureWidth, height: captureHeight},
+            NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeMain)
         }
       }
 
-      if(gVideoModel) {
-        //是否开启小流
-        NERtcSDK.getInstance().enableDualStreamMode(gVideoModel.mainEnableDualStream)
+      //设置第三流capture.
+      {
+        let captureWidth = multiVideoModel.thirdCaptureWidth
+        let captureHeight = multiVideoModel.thirdCaptureHeight
 
-        //主流设置
-        let configMain: NERtcConstants.NERtcVideoEncodeConfiguration = new NERtcConstants.NERtcVideoEncodeConfiguration
-        configMain.maxProfile = gVideoModel.mainSendResolution
-        configMain.degradationPreference = gVideoModel.mainEncodeFrameMode
-        configMain.framerate = this.translateFrameRate(gVideoModel.mainEncodeFrameRate)
-        configMain.cropMode = gVideoModel.mainCropMode
-        configMain.mirrorMode = gVideoModel.mainMirrorMode
-
-        let ret: number = NERtcSDK.getInstance().setLocalVideoConfig(configMain, NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeMain)
-        console.info(TAG, `set main localVideoConfig ret:${ret}, config:${JSON.stringify(configMain)}`)
-
-        //设置主流capture.
-        {
-          let captureWidth = gVideoModel.mainCaptureWidth
-          let captureHeight = gVideoModel.mainCaptureHeight
-
-          if(captureWidth != 0 && captureHeight != 0) {
-            NERtcSDK.getInstance().setCameraCaptureConfig({ width: captureWidth, height: captureHeight},
-              NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeMain)
-          }
-        }
-
-        //辅流设置
-        let configSub: NERtcConstants.NERtcVideoEncodeConfiguration = new NERtcConstants.NERtcVideoEncodeConfiguration
-        configSub.maxProfile = gVideoModel.subSendResolution
-        configSub.degradationPreference = gVideoModel.subEncodeFrameMode
-        configSub.framerate = this.translateFrameRate(gVideoModel.subEncodeFrameRate)
-        configSub.cropMode = gVideoModel.subCropMode
-        configSub.mirrorMode = gVideoModel.subMirrorMode
-        ret = NERtcSDK.getInstance().setLocalVideoConfig(configSub, NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeSub)
-        console.info(TAG, `set sub localVideoConfig ret:${ret}, config:${JSON.stringify(configSub)}`)
-
-        //设置辅流capture.
-        {
-          let captureWidth = gVideoModel.subCaptureWidth
-          let captureHeight = gVideoModel.subCaptureHeight
-
-          if(captureWidth != 0 && captureHeight != 0) {
-            NERtcSDK.getInstance().setCameraCaptureConfig({width: captureWidth, height: captureHeight},
-              NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeSub)
-          }
-        }
-
-        // 回调
-        if (this.isVideoFrameObserverEnabled != gVideoModel.enableFrameObserver) {
-          this.isVideoFrameObserverEnabled = gVideoModel.enableFrameObserver;
-          this.enableVideoFrameObserver(gVideoModel.enableFrameObserver);
+        if(captureWidth != 0 && captureHeight != 0) {
+          NERtcSDK.getInstance().setCameraCaptureConfig({ width: captureWidth, height: captureHeight},
+            NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeThird)
         }
       }
 
-      if (gDumpModel && gDumpModel.enableVideoDump) {
-        let param: object = new Object();
-        if (gDumpModel.enableDumpCapturedYUV) {
-          param["engine.video.video_dump_captured_yuv_mode"] = gDumpModel.enableDumpCapturedYUV;
-          param["engine.video.video_dump_captured_yuv_space"] = this.translateVideoDumpSpaceMB(gDumpModel.maxSpaceForDumpCapturedYUVMB);
-          param["engine.video.video_dump_captured_yuv_interval"] = this.translateVideoDumpInterval(gDumpModel.dumpCapturedYUVInterval);
-        }
-        if (gDumpModel.enableDumpEncodeYUV) {
-          param["engine.video.video_dump_encode_yuv_mode"] = gDumpModel.enableDumpEncodeYUV;
-          param["engine.video.video_dump_encode_yuv_space"] = this.translateVideoDumpSpaceMB(gDumpModel.maxSpaceForDumpEncodeYUVMB);
-          param["engine.video.video_dump_encode_yuv_interval"] = this.translateVideoDumpInterval(gDumpModel.dumpEncodeYUVInterval);
-        }
-        if (gDumpModel.enableDumpEncodedVideo) {
-          param["engine.video.video_dump_encode_video_mode"] = gDumpModel.enableDumpEncodedVideo;
-          param["engine.video.video_dump_encode_video_space"] = this.translateVideoDumpSpaceMB(gDumpModel.maxSpaceForDumpEncodedVideoMB);
-        }
-        //接收
-        if (gDumpModel.enableDumpDecodeVideo) {
-          param["engine.video.video_dump_decode_video_mode"] = gDumpModel.enableDumpDecodeVideo;
-          param["engine.video.video_dump_decode_video_space"] = this.translateVideoDumpSpaceMB(gDumpModel.maxSpaceForDumpDecodeVideoMB);
-        }
-        if (gDumpModel.enableDumpDecodedYUV) {
-          param["engine.video.video_dump_decode_yuv_mode"] = gDumpModel.enableDumpDecodedYUV;
-          param["engine.video.video_dump_decode_yuv_space"] = this.translateVideoDumpSpaceMB(gDumpModel.maxSpaceForDumpDecodedYUVMB);
-          param["engine.video.video_dump_decode_yuv_interval"] = this.translateVideoDumpInterval(gDumpModel.dumpDecodedYUVInterval);
-        }
-        if (gDumpModel.enableDumpPostProcessedYUV) {
-          param["engine.video.video_dump_post_process_yuv_mode"] = gDumpModel.enableDumpPostProcessedYUV;
-          param["engine.video.video_dump_post_process_yuv_space"] = this.translateVideoDumpSpaceMB(gDumpModel.maxSpaceForDumpPostProcessedYUVMB);
-          param["engine.video.video_dump_post_process_yuv_interval"] = this.translateVideoDumpInterval(gDumpModel.dumpPostProcessedYUVInterval);
-        }
+      //设置第四流capture.
+      {
+        let captureWidth = multiVideoModel.fourthCaptureWidth
+        let captureHeight = multiVideoModel.fourthCaptureHeight
 
-        NERtcSDK.getInstance().setParameters(param)
+        if(captureWidth != 0 && captureHeight != 0) {
+          NERtcSDK.getInstance().setCameraCaptureConfig({ width: captureWidth, height: captureHeight},
+            NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeFourth)
+        }
       }
 
-      // other settings.
-      if(gOtherModel) {
-        let channelProfile = gOtherModel.channelProfile
-        let ret: number = NERtcSDK.getInstance().setChannelProfile(channelProfile)
-        console.info(TAG, `setChannelProfile: ${ret}`)
+      //辅流设置
+      let configSub: NERtcConstants.NERtcVideoEncodeConfiguration = new NERtcConstants.NERtcVideoEncodeConfiguration
+      configSub.maxProfile = videoModel.subSendResolution
+      configSub.degradationPreference = videoModel.subEncodeFrameMode
+      configSub.framerate = this.translateFrameRate(videoModel.subEncodeFrameRate)
+      configSub.cropMode = videoModel.subCropMode
+      configSub.mirrorMode = videoModel.subMirrorMode
+      ret = NERtcSDK.getInstance().setLocalVideoConfig(configSub, NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeSub)
+      console.info(TAG, `set sub localVideoConfig ret:${ret}, config:${JSON.stringify(configSub)}`)
+
+      //设置辅流capture.
+      {
+        let captureWidth = videoModel.subCaptureWidth
+        let captureHeight = videoModel.subCaptureHeight
+
+        if(captureWidth != 0 && captureHeight != 0) {
+          NERtcSDK.getInstance().setCameraCaptureConfig({width: captureWidth, height: captureHeight},
+            NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeSub)
+        }
       }
 
-    // }, 1000)
+      // 回调
+      if (this.isVideoFrameObserverEnabled != videoModel.enableFrameObserver) {
+        this.isVideoFrameObserverEnabled = videoModel.enableFrameObserver;
+        this.enableVideoFrameObserver(videoModel.enableFrameObserver);
+      }
+    }
+
+    const dumpModel = this.rtcDemoLogicModel.GetPreferenceDumpModel()
+    if (dumpModel && dumpModel.enableVideoDump) {
+      let param: object = new Object();
+      if (dumpModel.enableDumpCapturedYUV) {
+        param["engine.video.video_dump_captured_yuv_mode"] = dumpModel.enableDumpCapturedYUV;
+        param["engine.video.video_dump_captured_yuv_space"] = this.translateVideoDumpSpaceMB(dumpModel.maxSpaceForDumpCapturedYUVMB);
+        param["engine.video.video_dump_captured_yuv_interval"] = this.translateVideoDumpInterval(dumpModel.dumpCapturedYUVInterval);
+      }
+      if (dumpModel.enableDumpEncodeYUV) {
+        param["engine.video.video_dump_encode_yuv_mode"] = dumpModel.enableDumpEncodeYUV;
+        param["engine.video.video_dump_encode_yuv_space"] = this.translateVideoDumpSpaceMB(dumpModel.maxSpaceForDumpEncodeYUVMB);
+        param["engine.video.video_dump_encode_yuv_interval"] = this.translateVideoDumpInterval(dumpModel.dumpEncodeYUVInterval);
+      }
+      if (dumpModel.enableDumpEncodedVideo) {
+        param["engine.video.video_dump_encode_video_mode"] = dumpModel.enableDumpEncodedVideo;
+        param["engine.video.video_dump_encode_video_space"] = this.translateVideoDumpSpaceMB(dumpModel.maxSpaceForDumpEncodedVideoMB);
+      }
+      //接收
+      if (dumpModel.enableDumpDecodeVideo) {
+        param["engine.video.video_dump_decode_video_mode"] = dumpModel.enableDumpDecodeVideo;
+        param["engine.video.video_dump_decode_video_space"] = this.translateVideoDumpSpaceMB(dumpModel.maxSpaceForDumpDecodeVideoMB);
+      }
+      if (dumpModel.enableDumpDecodedYUV) {
+        param["engine.video.video_dump_decode_yuv_mode"] = dumpModel.enableDumpDecodedYUV;
+        param["engine.video.video_dump_decode_yuv_space"] = this.translateVideoDumpSpaceMB(dumpModel.maxSpaceForDumpDecodedYUVMB);
+        param["engine.video.video_dump_decode_yuv_interval"] = this.translateVideoDumpInterval(dumpModel.dumpDecodedYUVInterval);
+      }
+      if (dumpModel.enableDumpPostProcessedYUV) {
+        param["engine.video.video_dump_post_process_yuv_mode"] = dumpModel.enableDumpPostProcessedYUV;
+        param["engine.video.video_dump_post_process_yuv_space"] = this.translateVideoDumpSpaceMB(dumpModel.maxSpaceForDumpPostProcessedYUVMB);
+        param["engine.video.video_dump_post_process_yuv_interval"] = this.translateVideoDumpInterval(dumpModel.dumpPostProcessedYUVInterval);
+      }
+      NERtcSDK.getInstance().setParameters(param)
+    }
+
+    // other settings.
+    if(otherModel) {
+      let channelProfile = otherModel.channelProfile
+
+      //下拉菜单的序号和定义的枚举类值不一致，这里做下调整
+      if(channelProfile >= 2)
+        channelProfile += 1
+
+      let ret: number = NERtcSDK.getInstance().setChannelProfile(channelProfile)
+      console.info(TAG, `setChannelProfile: ${ret}`)
+
+      let mediaEncryptionIndex = otherModel.mediaEncryption
+      let encryptionKey = otherModel.mediaEncryptionKey
+      console.info(TAG, `mediaEncryption index: ${mediaEncryptionIndex}, encryptionKey: ${encryptionKey}`)
+
+      if (mediaEncryptionIndex == 0) {
+        //Disable.
+        let ret = NERtcSDK.getInstance().enableEncryption(false)
+        console.info(TAG, `Disable encryption, ret:${ret}`)
+      } else if (mediaEncryptionIndex == 1) {
+        //国密.
+        let config: NERtcConstants.NERtcEncryptionConfig = {
+          mode: NERtcConstants.EncryptionMode.GMCryptoSM4ECB,
+          key: encryptionKey,
+          observer: null
+        }
+        let ret = NERtcSDK.getInstance().enableEncryption(true, config)
+        console.info(TAG, `Enable SM4ECB encryption, ret:${ret}`)
+      } else if (mediaEncryptionIndex == 2) {
+        //自定义加密.
+        let observer: NERtcPacketObserver = new DemoNERtcPackageObserver()
+        let config: NERtcConstants.NERtcEncryptionConfig = {
+          mode: NERtcConstants.EncryptionMode.EncryptionModeCustom,
+          key: encryptionKey,
+          observer: observer
+        }
+        let ret = NERtcSDK.getInstance().enableEncryption(true, config)
+        console.info(TAG, `Enable Custom encryption, ret:${ret}`)
+      }
+    }
   }
 
-  private extend = (): void => {
-    if(gAudioModel) {
+  private extendInitEngineTask = (): void => {
+    const audioModel = this.rtcDemoLogicModel.GetPreferenceAudioModel()
+    if(audioModel) {
       //实时音量回调
-      this.realTimeVolumeEnable(gAudioModel.captureVolumeEnable)
+      this.realTimeVolumeEnable(audioModel.captureVolumeEnable)
     }
 
     this.enableVoiceEffectIfNeeded()
@@ -510,16 +482,17 @@ export default class ChatPresenter extends NERtcCallbackEx {
   }
 
   private enableVirtualBackgroundIfNeeded()  : void {
+    const videoModel = this.rtcDemoLogicModel.GetPreferenceVideoModel()
     //是否打开
     let backData = new NERtcConstants.NERtcVirtualBackgroundSource()
-    if (gVideoModel.virtualBackgroundEnable) {
-      backData.backgroundSourceType = gVideoModel.virtualBackgroundType
-      backData.color = gVideoModel.virtualBackgroundColor
-      backData.blur_degree = gVideoModel.virtualBackgroundBlurDegree
+    if (videoModel.virtualBackgroundEnable) {
+      backData.backgroundSourceType = videoModel.virtualBackgroundType
+      backData.color = videoModel.virtualBackgroundColor
+      backData.blur_degree = videoModel.virtualBackgroundBlurDegree
 
-      if (gVideoModel.virtualBackgroundSourceIndex == 0) {
-        if(gVideoModel.virtualBackgroundSource && gVideoModel.virtualBackgroundSource.length > 0) {
-          const splits = gVideoModel.virtualBackgroundSource.split('/')
+      if (videoModel.virtualBackgroundSourceIndex == 0) {
+        if(videoModel.virtualBackgroundSource && videoModel.virtualBackgroundSource.length > 0) {
+          const splits = videoModel.virtualBackgroundSource.split('/')
           const fileName = splits[splits.length - 1]
           const lastPath = getContext().filesDir + "/media/" + fileName
           backData.source = lastPath
@@ -527,13 +500,18 @@ export default class ChatPresenter extends NERtcCallbackEx {
       }
       else {
         let mediaDir = getContext(this).filesDir + "/media";
-        let imageFilePath = mediaDir + "/" + "image_vb_sample_" + (gVideoModel.virtualBackgroundSourceIndex-1) + ".jpg";
+        let imageFilePath = mediaDir + "/" + "image_vb_sample_" + (videoModel.virtualBackgroundSourceIndex-1) + ".jpg";
         if (fs.accessSync(imageFilePath)) {
           backData.source = imageFilePath
         }
       }
 
-      NERtcSDK.getInstance().enableVirtualBackground(true, backData)
+      let force = videoModel.virtualBackgroundForce
+      if(force) {
+        console.info(TAG, 'User force open virtual background !!!')
+      }
+
+      NERtcSDK.getInstance().enableVirtualBackground(true, backData, force)
     }
     else {
       NERtcSDK.getInstance().enableVirtualBackground(false, backData)
@@ -541,41 +519,42 @@ export default class ChatPresenter extends NERtcCallbackEx {
   }
 
   private enableVoiceEffectIfNeeded() : void {
-    if (gAudioEffectModel) {
-      if (gAudioEffectModel.voiceChangerEffectsEnable) {
-        NERtcSDK.getInstance().setAudioEffectPreset(gAudioEffectModel.voiceChangerEffectsType)
+    const audioEffectModel = this.rtcDemoLogicModel.GetPreferenceAudioEffectModel()
+    if (audioEffectModel) {
+      if (audioEffectModel.voiceChangerEffectsEnable) {
+        NERtcSDK.getInstance().setAudioEffectPreset(audioEffectModel.voiceChangerEffectsType)
       }
 
-      if (gAudioEffectModel.voiceBeautifierEffectsEnable) {
-        NERtcSDK.getInstance().setVoiceBeautifierPreset(gAudioEffectModel.voiceBeautifierEffectsType)
+      if (audioEffectModel.voiceBeautifierEffectsEnable) {
+        NERtcSDK.getInstance().setVoiceBeautifierPreset(audioEffectModel.voiceBeautifierEffectsType)
       }
 
-      if (gAudioEffectModel.voicePitchEnable) {
-        NERtcSDK.getInstance().setLocalVoicePitch(gAudioEffectModel.voicePitch)
+      if (audioEffectModel.voicePitchEnable) {
+        NERtcSDK.getInstance().setLocalVoicePitch(audioEffectModel.voicePitch)
       }
 
-      if (gAudioEffectModel.voiceReverbEnable) {
+      if (audioEffectModel.voiceReverbEnable) {
         let param: NERtcConstants.NERtcReverbParam = new NERtcConstants.NERtcReverbParam
-        param.wetGain = gAudioEffectModel.wetGain
-        param.dryGain = gAudioEffectModel.dryGain
-        param.damping = gAudioEffectModel.damping
-        param.roomSize = gAudioEffectModel.roomSize
-        param.decayTime = gAudioEffectModel.decayTime
-        param.preDelay = gAudioEffectModel.preDelay
+        param.wetGain = audioEffectModel.wetGain
+        param.dryGain = audioEffectModel.dryGain
+        param.damping = audioEffectModel.damping
+        param.roomSize = audioEffectModel.roomSize
+        param.decayTime = audioEffectModel.decayTime
+        param.preDelay = audioEffectModel.preDelay
         NERtcSDK.getInstance().setLocalVoiceReverbParam(param)
       }
 
-      if (gAudioEffectModel.voiceEqualizationEnable) {
-        NERtcSDK.getInstance().setLocalVoiceEqualization(0, gAudioEffectModel.band31)
-        NERtcSDK.getInstance().setLocalVoiceEqualization(1, gAudioEffectModel.band62)
-        NERtcSDK.getInstance().setLocalVoiceEqualization(2, gAudioEffectModel.band125)
-        NERtcSDK.getInstance().setLocalVoiceEqualization(3, gAudioEffectModel.band250)
-        NERtcSDK.getInstance().setLocalVoiceEqualization(4, gAudioEffectModel.band500)
-        NERtcSDK.getInstance().setLocalVoiceEqualization(5, gAudioEffectModel.band1K)
-        NERtcSDK.getInstance().setLocalVoiceEqualization(6, gAudioEffectModel.band2K)
-        NERtcSDK.getInstance().setLocalVoiceEqualization(7, gAudioEffectModel.band4K)
-        NERtcSDK.getInstance().setLocalVoiceEqualization(8, gAudioEffectModel.band8K)
-        NERtcSDK.getInstance().setLocalVoiceEqualization(9, gAudioEffectModel.band16K)
+      if (audioEffectModel.voiceEqualizationEnable) {
+        NERtcSDK.getInstance().setLocalVoiceEqualization(0, audioEffectModel.band31)
+        NERtcSDK.getInstance().setLocalVoiceEqualization(1, audioEffectModel.band62)
+        NERtcSDK.getInstance().setLocalVoiceEqualization(2, audioEffectModel.band125)
+        NERtcSDK.getInstance().setLocalVoiceEqualization(3, audioEffectModel.band250)
+        NERtcSDK.getInstance().setLocalVoiceEqualization(4, audioEffectModel.band500)
+        NERtcSDK.getInstance().setLocalVoiceEqualization(5, audioEffectModel.band1K)
+        NERtcSDK.getInstance().setLocalVoiceEqualization(6, audioEffectModel.band2K)
+        NERtcSDK.getInstance().setLocalVoiceEqualization(7, audioEffectModel.band4K)
+        NERtcSDK.getInstance().setLocalVoiceEqualization(8, audioEffectModel.band8K)
+        NERtcSDK.getInstance().setLocalVoiceEqualization(9, audioEffectModel.band16K)
       }
     }
   }
@@ -670,11 +649,14 @@ export default class ChatPresenter extends NERtcCallbackEx {
     return true
   }
 
-  clearCache(): void {
+  clearCache(context: Context): void {
     let options: preferences.Options = { name: 'netease_settings' }
     let data = preferences.getPreferencesSync(getContext(), options)
     data.clearSync()
     Prompt.showToast({ message: '缓存清理成功' })
+    this.rtcDemoLogicModel.LoadDataModel(context)
+    this.release()
+    this.init(context)
   }
 
   /**
@@ -682,87 +664,164 @@ export default class ChatPresenter extends NERtcCallbackEx {
    * @returns
    */
   GetCanvasBorderRadius(): number {
-    return gOtherModel.canvasBorderRadius ?? 0
+    return this.rtcDemoLogicModel.GetPreferenceOtherModel().canvasBorderRadius ?? 0
+  }
+
+  /**
+   * 是否开启外部渲染
+   * @returns
+   */
+  isExternalRender(): boolean {
+    return this.rtcDemoLogicModel.GetPreferenceOtherModel().useExternalRender ?? false
   }
 
   join(login: LoginInfo): number {
+    this.type = 0;
     try {
-      if(gOtherModel && gOtherModel.chatDetail) {
-        NERtcSDK.getInstance().setStatsObserver({
-          onRtcStats:(stats: NERtcConstants.NERtcStats): void =>{
-            let detailInfo = JSON.stringify(stats, (key, value: Object) => {
-              if(typeof value === "bigint") {
-                return String(value)
-              }
-              return value
-            })
-            console.info('statsObserver', `onRtcStats: ${detailInfo}`)
-            delegates_?.forEach(delegate_ => {
-              if(delegate_?.detail) {
-                delegate_?.detail(detailInfo)
-              }
-            });
-          },
+      NERtcSDK.getInstance().setStatsObserver({
+        onRtcStats:(stats: NERtcConstants.NERtcStats): void =>{
+          const MB_SIZE = 1024 * 1024
+          let value = Number(stats.txBytes) / MB_SIZE
+          const tx = value.toFixed(2)
+          value = Number(stats.rxBytes) / MB_SIZE
+          const rx = value.toFixed(2)
 
-          onLocalAudioStats: (stats: NERtcConstants.NERtcAudioSendStats):void =>{
-            let detailInfo = JSON.stringify(stats, (key, value: Object) => {
-              if(typeof value === "bigint") {
-                return String(value)
-              }
-              return value
-            })
-            console.info('statsObserver', `onLocalAudioStats: ${detailInfo}`)
-          },
+          let localRtcStats: string = `tx:${tx}MB, rx:${rx}MB cpu:${stats.cpuTotalUsage} v_lost:${stats.txVideoPacketLossRate} a_lost:${stats.txAudioPacketLossRate} upRtt:${stats.upRtt} downRtt:${stats.downRtt}`
+          this.rtcDemoLogicModel.GetDelegates().forEach(delegate => {
+            if (delegate.localRtcStats) {
+              delegate.localRtcStats(localRtcStats)
+            }
+          })
+        },
 
-          onRemoteAudioStats: (statsArray: Array<NERtcConstants.NERtcAudioRecvStats>): void => {
-            let detailInfo = JSON.stringify(statsArray, (key, value: Object) => {
-              if(typeof value === "bigint") {
-                return String(value)
-              }
-              return value
-            })
-            console.info('statsObserver', `onRemoteAudioStats: ${detailInfo}`)
-          },
+        onLocalAudioStats: (stats: NERtcConstants.NERtcAudioSendStats):void =>{
+          let localAudioStat: string = ''
+          stats.audioLayers?.forEach(stat => {
+            let audioIndex = stat.streamType!!.valueOf() + 1
+            localAudioStat += `a_${audioIndex}: ${stat.kbps}kbps vol:${stat.volume} cap_vol:${stat.capVolume} lost:${stat.lossRate} rtt:${stat.rtt}`
+          })
+          this.rtcDemoLogicModel.GetDelegates().forEach(delegate => {
+            if (delegate.localAudioStats) {
+              delegate.localAudioStats(localAudioStat)
+            }
+          })
+        },
 
-          onLocalVideoStats: (stats: NERtcConstants.NERtcVideoSendStats):void =>{
-            let detailInfo = JSON.stringify(stats, (key, value: Object) => {
-              if(typeof value === "bigint") {
-                return String(value)
-              }
-              return value
+        onRemoteAudioStats: (statsArray: Array<NERtcConstants.NERtcAudioRecvStats>): void => {
+          let maps: Map<bigint, string> = new Map
+          statsArray?.forEach(info => {
+            let remoteAudioStat: string = ''
+            info.layers?.forEach(stat => {
+              let audioIndex = stat.streamType!!.valueOf() + 1
+              remoteAudioStat += `a_${audioIndex}: ${stat.kbps}kbps vol:${stat.volume} lost:${stat.lossRate} av_timestamp_diff:${stat.avTimestampDiff} peerToPeer:${stat.peerToPeerDelay}`
             })
-            console.info('statsObserver', `onLocalVideoStats: ${detailInfo}`)
-          },
+            maps.set(info.uid, remoteAudioStat)
+          })
+          this.rtcDemoLogicModel.GetDelegates().forEach(delegate => {
+            if (delegate.remoteAudioStats) {
+              delegate.remoteAudioStats(maps)
+            }
+          })
+        },
 
-          onRemoteVideoStats: (statsArray: Array<NERtcConstants.NERtcVideoRecvStats>):void => {
-            let detailInfo = JSON.stringify(statsArray, (key, value: Object) => {
-              if(typeof value === "bigint") {
-                return String(value)
-              }
-              return value
-            })
-            console.info('statsObserver', `onRemoteVideoStats: ${detailInfo}`)
-          },
+        onLocalVideoStats: (stats: NERtcConstants.NERtcVideoSendStats):void =>{
 
-          onNetworkQuality:(statsArray: Array<NERtcConstants.NERtcNetworkQualityInfo>):void => {
-            let detailInfo = JSON.stringify(statsArray, (key, value: Object) => {
-              if(typeof value === "bigint") {
-                return String(value)
+          let localVideoStat: string = ''
+          let localVideoStat1: string = ''
+          let localVideoStat2: string = ''
+          stats.videoLayers?.forEach(stat => {
+            if (stat.streamType == 1 || stat.streamType == 2) { //主视图 和 辅视图 显示在同一个窗口上
+              localVideoStat += `cap: ${stat.capWidth}x${stat.capHeight} v${stat.streamType}: ${stat.width}x${stat.height}#${stat.encoderOutputFrameRate} enc:${stat.encoderBitrate} kbps encoderName:${stat.encoderName} bw:${stat.dropBwStrategyEnabled} \n`
+            } else if (stat.streamType == 3) {
+              localVideoStat1 = `cap: ${stat.capWidth}x${stat.capHeight} v${stat.streamType}: ${stat.width}x${stat.height}#${stat.encoderOutputFrameRate} enc:${stat.encoderBitrate} kbps encoderName:${stat.encoderName} bw:${stat.dropBwStrategyEnabled} \n`
+            } else if (stat.streamType == 4) {
+              localVideoStat2 = `cap: ${stat.capWidth}x${stat.capHeight} v${stat.streamType}: ${stat.width}x${stat.height}#${stat.encoderOutputFrameRate} enc:${stat.encoderBitrate} kbps encoderName:${stat.encoderName} bw:${stat.dropBwStrategyEnabled} \n`
+            }
+          })
+
+          let maps: Map<number, string> = new Map
+          if (localVideoStat !== '')
+            maps.set(0, localVideoStat)
+          if (localVideoStat1 !== '')
+            maps.set(1, localVideoStat1)
+          if (localVideoStat2 !== '')
+            maps.set(2, localVideoStat2)
+
+          if (maps.size == 0) return
+
+          this.rtcDemoLogicModel.GetDelegates().forEach(delegate => {
+            if (delegate.localVideoStats) {
+              delegate.localVideoStats(maps)
+            }
+          })
+        },
+
+        onRemoteVideoStats: (statsArray: Array<NERtcConstants.NERtcVideoRecvStats>):void => {
+
+          let maps: Map<bigint, Map<number, string>> = new Map
+          statsArray?.forEach(info => {
+
+            let remoteVideoStat: string = ''
+            let remoteVideoStat1: string = ''
+            let remoteVideoStat2: string = ''
+            info.layers?.forEach((stat, index) => {
+              if (stat.streamType == 1 || stat.streamType == 2) { //主视图 和 辅视图 显示在同一个窗口上
+                remoteVideoStat += `v_${stat.streamType}: ${stat.width}x${stat.height}#${stat.fps} ${stat.receivedBitrate}kbps lost:${stat.packetLossRate} decoder:${stat.decoderName} peerToPeer:${stat.peerToPeerDelay}`
+              } else if (stat.streamType == 3) {
+                remoteVideoStat1 = `v_${stat.streamType}: ${stat.width}x${stat.height}#${stat.fps} ${stat.receivedBitrate}kbps lost:${stat.packetLossRate} decoder:${stat.decoderName} peerToPeer:${stat.peerToPeerDelay}`
+              } else if (stat.streamType == 4) {
+                remoteVideoStat2 = `v_${stat.streamType}: ${stat.width}x${stat.height}#${stat.fps} ${stat.receivedBitrate}kbps lost:${stat.packetLossRate} decoder:${stat.decoderName} peerToPeer:${stat.peerToPeerDelay}`
               }
-              return value
             })
-            console.info('statsObserver', `onNetworkQuality: ${detailInfo}`)
+
+            let infos: Map<number, string> = new Map
+            if (remoteVideoStat !== '') {
+              infos.set(0, remoteVideoStat)
+            }
+            if (remoteVideoStat1 !== '') {
+              infos.set(1, remoteVideoStat1)
+            }
+            if (remoteVideoStat2 !== '') {
+              infos.set(2, remoteVideoStat2)
+            }
+
+            if (infos.size != 0) {
+              maps.set(info.uid, infos)
+            }
+          })
+
+          if (maps.size !== 0) {
+            this.rtcDemoLogicModel.GetDelegates().forEach(delegate => {
+              if (delegate.remoteVideoStats) {
+                delegate.remoteVideoStats(maps)
+              }
+            })
           }
-        })
-      }
+        },
 
-      if(gOtherModel) {
+        onNetworkQuality:(statsArray: Array<NERtcConstants.NERtcNetworkQualityInfo>):void => {
+
+          let maps: Map<bigint, string> = new Map
+          statsArray?.forEach(info => {
+            let networkInfo = `network up:${info.upStatus} down:${info.downStatus}`
+            maps.set(info.uid, networkInfo)
+          })
+          this.rtcDemoLogicModel.GetDelegates().forEach(delegate => {
+            if (delegate.roomNetWorkQuality) {
+              delegate.roomNetWorkQuality(maps)
+            }
+          })
+        }
+      })
+
+      const otherModel = this.rtcDemoLogicModel.GetPreferenceOtherModel()
+      if(otherModel) {
         /***
          * ################ setLocalPublishFallbackOption  ################
          * DISABLE: 上行网络较弱时，不对音视频流作回退处理，但不能保证音视频流的质量。
          * AUDIO_ONLY: 上行网络较弱时，只发布音频流。
          */
-        let upFallbackOption = gOtherModel.upFallbackOption
+        let upFallbackOption = otherModel.upFallbackOption
         let streamOption: number  = NERtcConstants.StreamFallbackOption.DISABLED
         if(upFallbackOption == 1) {
           streamOption = NERtcConstants.StreamFallbackOption.AUDIO_ONLY
@@ -775,7 +834,7 @@ export default class ChatPresenter extends NERtcCallbackEx {
          * VIDEO_STREAM_LOW: 在下行网络条件较差的情况下，SDK 将只接收视频小流，即低分辨率、低码率视频流。
          * AUDIO_ONLY: 下行网络较弱时，先尝试只接收视频小流，即低分辨率、低码率视频流。如果网络环境无法显示视频，则再回退到只接收音频流。
          */
-        let downFallbackOption = gOtherModel.downFallbackOption
+        let downFallbackOption = otherModel.downFallbackOption
         if(downFallbackOption == 0) {
           streamOption = NERtcConstants.StreamFallbackOption.VIDEO_STREAM_LOW
         } else if(downFallbackOption == 1) {
@@ -783,10 +842,40 @@ export default class ChatPresenter extends NERtcCallbackEx {
         }
         ret = NERtcSDK.getInstance().setRemoteSubscribeFallbackOption(streamOption)
         console.info(TAG, `setRemoteSubscribeFallbackOption ret:${ret}`)
+
+        {
+          //设置本地媒体优先级
+          let listIndex = otherModel.mediaPriority
+          let mediaPriority = -1
+          if(listIndex == 0) {
+            mediaPriority = NERtcConstants.MediaPriority.kNERtcMediaPriorityHigh
+          } else if(listIndex == 1) {
+            mediaPriority = NERtcConstants.MediaPriority.kNERtcMediaPriorityNormal
+          }
+
+          let mode = otherModel.isPreemptiveMode
+          console.info(TAG, `Set preemptive mode: ${mode}`)
+          if(mediaPriority != -1) {
+            ret = NERtcSDK.getInstance().setLocalMediaPriority(mediaPriority, mode)
+            console.info(TAG, `setLocalMediaPriority: ${mediaPriority}, ret:${ret}`)
+          }
+        }
+
+        {
+          //云代理相关的设置
+          let listIndex = otherModel.cloudProxyOption
+          let cloudProxyOption = NERtcConstants.NERtcTransportType.kNERtcTransportTypeNoneProxy
+          if(listIndex == 1) {
+            cloudProxyOption = NERtcConstants.NERtcTransportType.kNERtcTransportTypeUDPProxy
+          }
+          ret = NERtcSDK.getInstance().setCloudProxy(cloudProxyOption)
+          console.info(TAG, `setCloudProxy: ${cloudProxyOption}, ret: ${ret}`)
+        }
       }
 
-      if(gAudioModel) {
-        this.realTimeVolumeEnable(gAudioModel.captureVolumeEnable)
+      const audioModel = this.rtcDemoLogicModel.GetPreferenceAudioModel()
+      if(audioModel) {
+        this.realTimeVolumeEnable(audioModel.captureVolumeEnable)
       }
     } catch (e) {
       console.error(TAG, JSON.stringify(e))
@@ -805,7 +894,8 @@ export default class ChatPresenter extends NERtcCallbackEx {
     let ret: number = NERtcConstants.ErrorCode.NO_ERROR
     if(login) {
       ret = NERtcSDK.getInstance().joinChannel(login?.token ?? "", login?.cname, BigInt(login?.uid))
-      state_ = (ret == NERtcConstants.ErrorCode.NO_ERROR) ? ChatState.CHAT_ING : ChatState.CHAT_IDLE
+      const state = (ret == NERtcConstants.ErrorCode.NO_ERROR) ? ChatState.CHAT_ING : ChatState.CHAT_IDLE
+      this.rtcDemoLogicModel.UpdateRtcRoomState(state)
       console.info(TAG, "=== Invoke join End. ===")
       this.enableBackgroundRunning(true);
       this.enableVoiceEffectIfNeeded();
@@ -820,52 +910,164 @@ export default class ChatPresenter extends NERtcCallbackEx {
     NERtcSDK.getInstance().setStatsObserver(null)
     let ret: number = NERtcSDK.getInstance().leaveChannel()
     console.info(TAG, 'Leave channel ret: ' + ret)
-    // remoteUsers_ = []
-    this.localUser = null
+    this.rtcDemoLogicModel.UpdateLocalDemoUser(null)
     this.enableBackgroundRunning(false);
   }
 
-  attach(user: DemoUser): void {
-
-    let scaleMode: number = NERtcConstants.NERtcVideoScalingMode.kNERtcVideoScaleFit
-    if(gVideoModel) {
-      scaleMode = gVideoModel.scaleMode
+  private EnsureXComponentId(user: DemoUser, multiStream: "third" | "fourth" | null): string {
+    let destXComponentId = user.xComponentIdMain
+    if (multiStream != null && multiStream == "third") {
+      destXComponentId = user.xComponentIdThird as string
     }
+    if (multiStream != null && multiStream == "fourth") {
+      destXComponentId = user.xComponentIdFourth as string
+    }
+    return destXComponentId
+  }
 
-    let canvas: NERtcConstants.NERtcVideoCanvas = { canvasId: user.xComponentIdMain, scalingMode: scaleMode }
+  private EnsureStreamType(multiStream: "third" | "fourth" | null): NERtcConstants.NERtcVideoStreamType {
+    let streamType = NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeMain
+    if (multiStream != null && multiStream == "third") {
+      streamType = NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeThird
+    }
+    if (multiStream != null && multiStream == "fourth") {
+      streamType = NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeFourth
+    }
+    return streamType
+  }
+
+  detach(user: DemoUser, multiStream: "third" | 'fourth' | null): void {
+    let useExternal = this.rtcDemoLogicModel.GetPreferenceOtherModel().useExternalRender
+    if (useExternal) {
+      let streamType = this.EnsureStreamType(multiStream)
+      if(user.local) {
+        let ret = NERtcSDK.getInstance().setLocalExternalVideoRender(streamType, null)
+        console.info(TAG, `setLocalExternalVideoRender ret:${ret}`)
+      } else {
+        let ret = NERtcSDK.getInstance().setRemoteExternalVideoRender(user.uid, streamType, null)
+        console.info(TAG, `setRemoteExternalVideoRender ret:${ret}`)
+      }
+    }
+  }
+
+  attach(user: DemoUser, multiStream: "third" | "fourth" | null): void {
+
     //fix issue for OMNRTCG2-58636
     if(login_ && login_.uid == '0') {
       login_.uid = user.uid.toString()
     }
     let isMe = user.uid.toString() === login_?.uid
-    let ret: number;
-    if(isMe) {
-      ret = NERtcSDK.getInstance().setupLocalVideoCanvas(canvas)
+
+    let useExternal = this.rtcDemoLogicModel.GetPreferenceOtherModel().useExternalRender
+    if(!useExternal) {
+
+      let scaleMode: number = NERtcConstants.NERtcVideoScalingMode.kNERtcVideoScaleFit
+      const videoModel = this.rtcDemoLogicModel.GetPreferenceVideoModel()
+      if(videoModel) {
+        scaleMode = videoModel.scaleMode
+      }
+
+      let mirrorMode = NERtcConstants.NERtcVideoMirrorMode.kNERtcVideoMirrorModeAuto
+      if (user.getCanvasMirror() != null) {
+        mirrorMode = user.getCanvasMirror() ? NERtcConstants.NERtcVideoMirrorMode.kNERtcVideoMirrorModeEnabled : NERtcConstants.NERtcVideoMirrorMode.kNERtcVideoMirrorModeDisabled
+      }
+      let canvas: NERtcConstants.NERtcVideoCanvas = { canvasId: user.xComponentIdMain, scalingMode: scaleMode, mirrorMode: mirrorMode }
+      if(multiStream != null && multiStream == "third"){
+        canvas.canvasId = user.xComponentIdThird as string
+      }else if(multiStream != null && multiStream == "fourth"){
+        canvas.canvasId = user.xComponentIdFourth as string
+      }
+
+      let ret: number;
+      if(isMe) {
+        if(multiStream != null){
+          let streamType = NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeThird
+          if(multiStream == "fourth")
+            streamType = NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeFourth
+          ret = NERtcSDK.getInstance().setupLocalVideoCanvas(canvas, streamType)
+        }else {
+          ret = NERtcSDK.getInstance().setupLocalVideoCanvas(canvas)
+        }
+      } else {
+        if(multiStream != null){
+          let streamType = NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeThird
+          if(multiStream == "fourth")
+            streamType = NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeFourth
+          ret = NERtcSDK.getInstance().setupRemoteVideoCanvas(canvas, user.uid, streamType)
+        }else{
+          ret = NERtcSDK.getInstance().setupRemoteVideoCanvas(canvas, user.uid)
+        }
+      }
+      console.info(TAG, `uid:${user.uid} setup canvas ret:${ret}`)
     } else {
-      ret = NERtcSDK.getInstance().setupRemoteVideoCanvas(canvas, user.uid)
+
+      //外部渲染逻辑
+      if(this.videoRender == null)
+        this.videoRender = new VideoRenderProcessing()
+
+      if(isMe) {
+        let destXComponentId: string = this.EnsureXComponentId(user, multiStream)
+        console.info(TAG, `local xcomponment id: ${destXComponentId}`)
+        let canvas: NERtcConstants.NERtcExternalVideoCanvas = {
+          nativePlugin: this.videoRender!!.getRenderHandle(destXComponentId)
+        }
+        let ret = NERtcSDK.getInstance().setLocalExternalVideoRender(this.EnsureStreamType(multiStream), canvas)
+        console.info(TAG, `setLocalExternalVideoRender: ${ret}`)
+      } else {
+        let destXComponentId: string = this.EnsureXComponentId(user, multiStream)
+        console.info(TAG, `remote xcomponment id: ${destXComponentId}`)
+        let canvas: NERtcConstants.NERtcExternalVideoCanvas = {
+          nativePlugin: this.videoRender!!.getRenderHandle(destXComponentId)
+        }
+        let streamType = this.EnsureStreamType(multiStream)
+        let ret = NERtcSDK.getInstance().setRemoteExternalVideoRender(user.uid, streamType, canvas)
+        console.info(TAG, `setRemoteExternalVideoRender: uid:${user.uid}, ret:${ret}`)
+      }
     }
-    console.info(TAG, `uid:${user.uid} setup canvas ret:${ret}`)
   }
 
   attachSub(user: DemoUser): void {
     if(!user.xComponentIdSub) {
       return
     }
+    const videoModel = this.rtcDemoLogicModel.GetPreferenceVideoModel()
+    let useExternal = this.rtcDemoLogicModel.GetPreferenceOtherModel().useExternalRender
+    if(!useExternal) {
+      let scaleMode: number = NERtcConstants.NERtcVideoScalingMode.kNERtcVideoScaleFit
+      if(videoModel) {
+        scaleMode = videoModel.scaleMode
+      }
 
-    let scaleMode: number = NERtcConstants.NERtcVideoScalingMode.kNERtcVideoScaleFit
-    if(gVideoModel) {
-      scaleMode = gVideoModel.scaleMode
-    }
+      let mirrorMode = NERtcConstants.NERtcVideoMirrorMode.kNERtcVideoMirrorModeAuto
+      if (user.getCanvasMirror() != null) {
+        mirrorMode = user.getCanvasMirror() ? NERtcConstants.NERtcVideoMirrorMode.kNERtcVideoMirrorModeEnabled : NERtcConstants.NERtcVideoMirrorMode.kNERtcVideoMirrorModeDisabled
+      }
 
-    let canvas: NERtcConstants.NERtcVideoCanvas = { canvasId: user.xComponentIdSub,
-     scalingMode: scaleMode }
-    let ret:  number;
-    if(user.local) {
-      ret = NERtcSDK.getInstance().setupLocalSubStreamVideoCanvas(canvas)
+      let canvas: NERtcConstants.NERtcVideoCanvas = { canvasId: user.xComponentIdSub,
+        scalingMode: scaleMode, mirrorMode: mirrorMode }
+      let ret:  number;
+      if(user.local) {
+        ret = NERtcSDK.getInstance().setupLocalSubStreamVideoCanvas(canvas)
+      } else {
+        ret = NERtcSDK.getInstance().setupRemoteSubStreamVideoCanvas(canvas, user.uid)
+      }
+      console.info(TAG, `uid:${user.uid}, setup sub canvas local:${user.local} ret:${ret}`)
     } else {
-      ret = NERtcSDK.getInstance().setupRemoteSubStreamVideoCanvas(canvas, user.uid)
+      //外部渲染逻辑
+      if(this.videoRender == null)
+        this.videoRender = new VideoRenderProcessing()
+
+      let canvas: NERtcConstants.NERtcExternalVideoCanvas = {
+        nativePlugin: this.videoRender!!.getRenderHandle(user.xComponentIdSub)
+      }
+      if (user.local) {
+        let ret = NERtcSDK.getInstance().setLocalExternalVideoRender(NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeSub, canvas)
+        console.info(TAG, `setLocalExternalVideoRender subStream, ret:${ret}`)
+      } else {
+        let ret = NERtcSDK.getInstance().setRemoteExternalVideoRender(user.uid, NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeSub, canvas)
+        console.info(TAG, `setRemoteExternalVideoRender subStream, ret:${ret}`)
+      }
     }
-    console.info(TAG, `uid:${user.uid}, setup sub canvas local:${user.local} ret:${ret}`)
   }
 
   enableVideo(enabled: boolean) {
@@ -878,6 +1080,44 @@ export default class ChatPresenter extends NERtcCallbackEx {
     }
   }
 
+  startPushStreaming(login: LoginInfo) {
+    const otherModel = this.rtcDemoLogicModel.GetPreferenceOtherModel()
+    let config:NERtcConstants.NERtcPushStreamingConfig = new NERtcConstants.NERtcPushStreamingConfig
+    config.url = this.pushAddressArray[otherModel.pushAddressIndex]
+    console.info(TAG, `startPushStreaming config.url:${config.url}`)
+    if(otherModel.pushAddress != "") {
+      config.url = otherModel.pushAddress
+    }
+    LiveStreamingKit.getInstance().setPushAddress(config.url)
+    LiveStreamingKit.getInstance().setPushStreamingConfig(config)
+    LiveStreamingKit.getInstance().setServerRecord(otherModel.serverRecord)
+    LiveStreamingKit.getInstance().setCdnPass(otherModel.cdnPass)
+    login_ = login;
+    config.streamingRoomInfo = new NERtcConstants.NERtcStreamingRoomInfo
+    config.streamingRoomInfo.uid = BigInt(login.uid)
+    config.streamingRoomInfo.channelName = login.cname
+    config.streamingRoomInfo.token = login?.token ?? ""
+    this.rtcDemoLogicModel.UpdatePushStreamUid(config.streamingRoomInfo.uid)
+    this.type = 1;
+    let ret: number = NERtcSDK.getInstance().startPushStreaming(config)
+    console.log("liveStreamKit 开始单推")
+    if(ret == NERtcConstants.ErrorCode.NO_ERROR) {
+      Prompt.showToast({ message: `开始融合推流`})
+    } else {
+      Prompt.showToast({ message: `融合推流失败:${ret}`})
+    }
+    return ret
+  }
+
+  stopPushStreaming() {
+    let ret: number = NERtcSDK.getInstance().stopPushStreaming()
+    if(ret == NERtcConstants.ErrorCode.NO_ERROR) {
+      Prompt.showToast({ message: `结束融合推流`})
+    } else {
+      Prompt.showToast({ message: `结束推流失败:${ret}`})
+    }
+  }
+
   enableSubVideo(enabled: boolean) {
     let ret: number = NERtcSDK.getInstance().enableLocalVideo(enabled, NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeSub)
     console.info(TAG, `enableSubVideo enabled:${enabled}, result:${ret}`)
@@ -887,18 +1127,63 @@ export default class ChatPresenter extends NERtcCallbackEx {
       Prompt.showToast({ message: `本地辅流视频操作失败:${ret}`})
     }
 
-    if(this.localUser) {
+    const localUser = this.rtcDemoLogicModel.GetLocalDemoUser()
+    if(localUser) {
       if(enabled && ret == NERtcConstants.ErrorCode.NO_ERROR) {
-        this.localUser.xComponentIdSub = this.localUser.generatorSubCanvasId()
-        delegates_?.forEach(delegate_ => {
-          delegate_?.update(OPERATOR.UPD, DemoUser.newInstance(this.localUser));
-        });
+        localUser.xComponentIdSub = localUser.generatorSubCanvasId()
+        this.rtcDemoLogicModel.GetDelegates().forEach(delegate => {
+          delegate.update(OPERATOR.UPD, DemoUser.newInstance(localUser));
+        })
       } else {
-        this.localUser.xComponentIdSub = undefined
-        delegates_?.forEach(delegate_ => {
-          delegate_?.update(OPERATOR.UPD, DemoUser.newInstance(this.localUser));
-        });
+        localUser.xComponentIdSub = undefined
+        this.rtcDemoLogicModel.GetDelegates().forEach(delegate => {
+          delegate.update(OPERATOR.UPD, DemoUser.newInstance(localUser));
+        })
       }
+    }
+  }
+
+  enableThirdVideo(enabled: boolean) {
+    let ret: number = NERtcSDK.getInstance().enableLocalVideo(enabled, NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeThird)
+    console.info(TAG, `enableThirdVideo enabled:${enabled}, result:${ret}`)
+    if(ret == NERtcConstants.ErrorCode.NO_ERROR) {
+      Prompt.showToast({ message: `本地第三流视频:${enabled?'开':'关'}`})
+    } else {
+      Prompt.showToast({ message: `本地第三流视频操作失败:${ret}`})
+      return;
+    }
+    const localUser = this.rtcDemoLogicModel.GetLocalDemoUser()
+    let user = new DemoUser(localUser?.uid as bigint, true, "third");
+    if(enabled) {
+      this.rtcDemoLogicModel.GetDelegates().forEach(delegate => {
+        delegate.update(OPERATOR.ADD, user);
+      })
+    }else{
+      this.rtcDemoLogicModel.GetDelegates().forEach(delegate => {
+        delegate.update(OPERATOR.DEL, user);
+      })
+    }
+  }
+
+  enableFourthVideo(enabled: boolean) {
+    let ret: number = NERtcSDK.getInstance().enableLocalVideo(enabled, NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeFourth)
+    console.info(TAG, `enableFourthVideo enabled:${enabled}, result:${ret}`)
+    if(ret == NERtcConstants.ErrorCode.NO_ERROR) {
+      Prompt.showToast({ message: `本地第四流视频:${enabled?'开':'关'}`})
+    } else {
+      Prompt.showToast({ message: `本地第四流视频操作失败:${ret}`})
+    }
+
+    const localUser = this.rtcDemoLogicModel.GetLocalDemoUser()
+    let user = new DemoUser(localUser?.uid as bigint, true, "fourth");
+    if(enabled) {
+      this.rtcDemoLogicModel.GetDelegates().forEach(delegate => {
+        delegate.update(OPERATOR.ADD, user);
+      })
+    }else{
+      this.rtcDemoLogicModel.GetDelegates().forEach(delegate => {
+        delegate.update(OPERATOR.DEL, user);
+      })
     }
   }
 
@@ -915,6 +1200,22 @@ export default class ChatPresenter extends NERtcCallbackEx {
     console.info(TAG, `muteSubVideo mute:${mute}, ret:${ret}`)
     if(ret == NERtcConstants.ErrorCode.NO_ERROR) {
       Prompt.showToast({ message: `本地辅流视频:${mute ? 'mute':'unmute'} ret:${ret}`})
+    }
+  }
+
+  muteThirdVideo(mute: boolean) {
+    let ret: number = NERtcSDK.getInstance().muteLocalVideo(NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeThird, mute)
+    console.info(TAG, `muteThirdVideo mute:${mute}, ret:${ret}`)
+    if(ret == NERtcConstants.ErrorCode.NO_ERROR) {
+      Prompt.showToast({ message: `第三流视频:${mute ? 'mute':'unmute'} ret:${ret}`})
+    }
+  }
+
+  muteFourthVideo(mute: boolean) {
+    let ret: number = NERtcSDK.getInstance().muteLocalVideo(NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeFourth, mute)
+    console.info(TAG, `muteFourthVideo mute:${mute}, ret:${ret}`)
+    if(ret == NERtcConstants.ErrorCode.NO_ERROR) {
+      Prompt.showToast({ message: `第四流视频:${mute ? 'mute':'unmute'} ret:${ret}`})
     }
   }
 
@@ -982,34 +1283,6 @@ export default class ChatPresenter extends NERtcCallbackEx {
   muteLocalAudio(enable: boolean): void {
     let ret: number = NERtcSDK.getInstance().muteLocalAudioStream(enable)
     console.info(TAG, `muteLocalAudioStream enabled: ${enable}, ret: ${ret}`)
-  }
-
-  enableMediaCryptoCustom(enabled: boolean): number {
-    if(enabled) {
-      let observer: NERtcPacketObserver = new DemoNERtcPackageObserver();
-      let config: NERtcConstants.NERtcEncryptionConfig = {
-        mode: NERtcConstants.EncryptionMode.EncryptionModeCustom,
-        key: 'I_am_a_key',
-        observer: observer
-      }
-      return NERtcSDK.getInstance().enableEncryption(enabled, config)
-    } else {
-      let config: NERtcConstants.NERtcEncryptionConfig = {
-        mode: NERtcConstants.EncryptionMode.EncryptionModeCustom,
-        key: 'I_am_a_key',
-        observer: null
-      }
-      return NERtcSDK.getInstance().enableEncryption(enabled, config)
-    }
-  }
-
-  enableMediaCryptoSM4(enabled: boolean): void {
-    let config: NERtcConstants.NERtcEncryptionConfig = {
-      mode: NERtcConstants.EncryptionMode.GMCryptoSM4ECB,
-      key: "I_am_a_key",
-      observer: null
-    }
-    NERtcSDK.getInstance().enableEncryption(enabled, config);
   }
 
   enablePushAudioEncodeFrame(enabled: boolean, path?: string): boolean {
@@ -1182,7 +1455,8 @@ export default class ChatPresenter extends NERtcCallbackEx {
 
   enableAudioMix(enabled: boolean) {
 
-    if(!gAudioModel.audioMixUrl && !gAudioModel.audioMixPath) {
+    const audioModel = this.rtcDemoLogicModel.GetPreferenceAudioModel()
+    if(!audioModel.audioMixUrl && !audioModel.audioMixPath) {
       Prompt.showToast({ message: '请设置伴音播放路径' })
       return
     }
@@ -1191,18 +1465,18 @@ export default class ChatPresenter extends NERtcCallbackEx {
       let option: NERtcConstants.NERtcCreateAudioMixingOption = new NERtcConstants.NERtcCreateAudioMixingOption
 
       let lastPath: string
-      if(gAudioModel.audioMixUrl.trim() != '') {
-        lastPath = gAudioModel.audioMixUrl
+      if(audioModel.audioMixUrl.trim() != '') {
+        lastPath = audioModel.audioMixUrl
       } else {
-        const splits = gAudioModel.audioMixPath.split('/')
+        const splits = audioModel.audioMixPath.split('/')
         const fileName = splits[splits.length - 1]
         lastPath = getContext().filesDir + "/media/" + fileName
       }
 
       option.path = lastPath
-      option.loopCount = gAudioModel.audioMixLoopNum
-      option.sendEnabled = gAudioModel.audioMixIsSend
-      option.playbackEnabled = gAudioModel.audioMixIsPlay
+      option.loopCount = audioModel.audioMixLoopNum
+      option.sendEnabled = audioModel.audioMixIsSend
+      option.playbackEnabled = audioModel.audioMixIsPlay
 
       let ret: number = NERtcSDK.getInstance().startAudioMixing(option)
       if(ret != NERtcConstants.ErrorCode.NO_ERROR) {
@@ -1217,29 +1491,30 @@ export default class ChatPresenter extends NERtcCallbackEx {
   }
 
   setAudioMixingPitch() {
-    let ret: number = NERtcSDK.getInstance().setAudioMixingPitch(gAudioModel.audioMixPitch)
+    const audioModel = this.rtcDemoLogicModel.GetPreferenceAudioModel()
+    let ret: number = NERtcSDK.getInstance().setAudioMixingPitch(audioModel.audioMixPitch)
     if(ret != NERtcConstants.ErrorCode.NO_ERROR) {
       Prompt.showToast({ message: `设置伴音音调失败':${ret}`})
     }
   }
 
   enableAudioEffect(enabled: boolean) {
-
-    if(!gAudioModel.audioEffect1Url) {
+    const audioModel = this.rtcDemoLogicModel.GetPreferenceAudioModel()
+    if(!audioModel.audioEffect1Url) {
       Prompt.showToast({ message: '请设置音效播放路径' })
       return
     }
 
     if(enabled) {
-      const splits = gAudioModel.audioEffect1Url.split('/')
+      const splits = audioModel.audioEffect1Url.split('/')
       const fileName = splits[splits.length - 1]
       const lastPath = getContext().filesDir + "/media/" + fileName
 
       let option: NERtcConstants.NERtcCreateAudioEffectOption = new NERtcConstants.NERtcCreateAudioEffectOption
       option.path = lastPath
-      option.loopCount = gAudioModel.audioEffect1LoopNum
-      option.sendEnabled = gAudioModel.audioEffect1IsSend
-      option.playbackEnabled = gAudioModel.audioEffect1IsPlay
+      option.loopCount = audioModel.audioEffect1LoopNum
+      option.sendEnabled = audioModel.audioEffect1IsSend
+      option.playbackEnabled = audioModel.audioEffect1IsPlay
 
       let ret: number = NERtcSDK.getInstance().playEffect(1, option)
       console.info(TAG, `playEffect id:1, ret:${ret}`)
@@ -1250,26 +1525,28 @@ export default class ChatPresenter extends NERtcCallbackEx {
   }
 
   setAudioEffectPitch() {
-    let ret: number = NERtcSDK.getInstance().setEffectPitch(1, gAudioModel.audioEffect1Pitch)
+    const audioModel = this.rtcDemoLogicModel.GetPreferenceAudioModel()
+    let ret: number = NERtcSDK.getInstance().setEffectPitch(1, audioModel.audioEffect1Pitch)
     if(ret != NERtcConstants.ErrorCode.NO_ERROR) {
       Prompt.showToast({ message: `设置音调音调失败':${ret}`})
     }
   }
 
   enableScreenShare(enable: boolean) {
+    const localUser = this.rtcDemoLogicModel.GetLocalDemoUser()
+    const videoModel = this.rtcDemoLogicModel.GetPreferenceVideoModel()
     if(enable) {
-
       let profile: number = NERtcConstants.NERtcVideoProfileType.kNERtcVideoProfileHD1080P
-      if(gVideoModel.screenSendResolution == 0) {
+      if(videoModel.screenSendResolution == 0) {
         profile = NERtcConstants.NERtcVideoProfileType.kNERtcVideoProfileStandard
-      } else if(gVideoModel.screenSendResolution == 1) {
+      } else if(videoModel.screenSendResolution == 1) {
         profile = NERtcConstants.NERtcVideoProfileType.kNERtcVideoProfileHD720P
-      } else if(gVideoModel.screenSendResolution == 2) {
+      } else if(videoModel.screenSendResolution == 2) {
         profile = NERtcConstants.NERtcVideoProfileType.kNERtcVideoProfileHD1080P
       }
 
       let frameRate: number = NERtcConstants.NERtcVideoFrameRate.kNERtcVideoFrameRateFps30
-      switch (gVideoModel.screenFrameRate) {
+      switch (videoModel.screenFrameRate) {
         case 0:
           frameRate = NERtcConstants.NERtcVideoFrameRate.kNERtcVideoFrameRateFps7
           break;
@@ -1291,35 +1568,35 @@ export default class ChatPresenter extends NERtcCallbackEx {
       }
 
       let contentPrefer: NERtcConstants.NERtcSubStreamContentPrefer = NERtcConstants.NERtcSubStreamContentPrefer.kNERtcSubStreamContentPreferMotion;
-      if (gVideoModel.screenMode == 1) {
+      if (videoModel.screenMode == 1) {
         contentPrefer = NERtcConstants.NERtcSubStreamContentPrefer.kNERtcSubStreamContentPreferDetails;
       }
       let config: NERtcConstants.NERtcScreenConfiguration = new NERtcConstants.NERtcScreenConfiguration
       config.maxProfile = profile
       config.framerate = frameRate
-      config.minFramerate = gVideoModel.screenMinFrameRate
-      config.bitrate = gVideoModel.screenBitRate
-      config.minBitrate = gVideoModel.screenMinBitRate
+      config.minFramerate = videoModel.screenMinFrameRate
+      config.bitrate = videoModel.screenBitRate
+      config.minBitrate = videoModel.screenMinBitRate
       config.contentPrefer = contentPrefer;
 
       let ret: number = NERtcSDK.getInstance().startScreenCapture(config)
       console.info(TAG, `startScreenCapture, ret: ${ret}`)
 
-      if(ret == NERtcConstants.ErrorCode.NO_ERROR && this.localUser) {
-        this.localUser.xComponentIdSub = this.localUser.generatorSubCanvasId()
-        delegates_?.forEach(delegate_ => {
-          delegate_?.update(OPERATOR.UPD, DemoUser.newInstance(this.localUser));
-        });
+      if(ret == NERtcConstants.ErrorCode.NO_ERROR && localUser) {
+        localUser.xComponentIdSub = localUser.generatorSubCanvasId()
+        this.rtcDemoLogicModel.GetDelegates().forEach(delegate => {
+          delegate.update(OPERATOR.UPD, DemoUser.newInstance(localUser));
+        })
       }
     } else {
       let ret: number = NERtcSDK.getInstance().stopScreenCapture()
       console.info(TAG, `stopScreenCapture, ret: ${ret}`)
       if(ret == NERtcConstants.ErrorCode.NO_ERROR) {
-        if(this.localUser) {
-          this.localUser.xComponentIdSub = undefined
-          delegates_?.forEach(delegate_ => {
-            delegate_?.update(OPERATOR.UPD, DemoUser.newInstance(this.localUser));
-          });
+        if(localUser) {
+          localUser.xComponentIdSub = undefined
+          this.rtcDemoLogicModel.GetDelegates().forEach(delegate => {
+            delegate.update(OPERATOR.UPD, DemoUser.newInstance(localUser));
+          })
         }
       }
     }
@@ -1331,16 +1608,21 @@ export default class ChatPresenter extends NERtcCallbackEx {
       setTimeout(() => {
         let on: boolean = NERtcSDK.getInstance().isSpeakerphoneOn()
         console.info(TAG, 'isSpeakerphoneOn: ' + on)
-        Prompt.showToast({ message: `设置扬声器: ${on ? '开': '关'}`})
       }, 500)
     }
   }
 
+  getSpeakerState() {
+    let ret = NERtcSDK.getInstance().isSpeakerphoneOn()
+    Prompt.showToast({ message: `扬声器状态:${ret ? '开':'关'}`})
+  }
+
   enableAudioDump(enabled: boolean) {
 
+    const audioModel = this.rtcDemoLogicModel.GetPreferenceAudioModel()
     let type: number = NERtcConstants.NERtcAudioDumpType.kNERtcAudioDumpTypeWAV
-    if(gAudioModel) {
-      type = gAudioModel.audioDumpType
+    if(audioModel) {
+      type = audioModel.audioDumpType
       console.info(TAG, `audio dump type: ${type}`)
     }
 
@@ -1357,27 +1639,72 @@ export default class ChatPresenter extends NERtcCallbackEx {
     }
   }
 
+  private ensureMediaStreamType(): number {
+    const videoModel = this.rtcDemoLogicModel.GetPreferenceVideoModel()
+    let streamType = NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeMain
+    if(videoModel.previewStreamType == 0){
+      streamType = NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeMain
+    }else if(videoModel.previewStreamType == 1){
+      streamType = NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeSub
+    }else if(videoModel.previewStreamType == 2){
+      streamType = NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeThird
+    }else if(videoModel.previewStreamType == 3){
+      streamType = NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeFourth
+    }
+    return streamType
+  }
+
   startPreview(login: LoginInfo) {
     login_ = login
     this.enableVirtualBackgroundIfNeeded()
-    let ret: number = NERtcSDK.getInstance().startVideoPreview(NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeMain)
+    let streamType = this.ensureMediaStreamType()
+    let ret: number = NERtcSDK.getInstance().startVideoPreview(streamType)
     Prompt.showToast({ message: `打开预览:${ret == NERtcConstants.ErrorCode.NO_ERROR ? '成功':'失败'}`})
+    this.enableBackgroundRunning(true);
+  }
+
+  stopPreview() {
+    let streamType = this.ensureMediaStreamType()
+    let ret: number = NERtcSDK.getInstance().stopVideoPreview(streamType)
+    Prompt.showToast({ message: `关闭预览:${ret == NERtcConstants.ErrorCode.NO_ERROR ? '成功':'失败'}`})
+    this.enableBackgroundRunning(false)
+  }
+
+  getCurrentStreamType(): number {
+    return this.rtcDemoLogicModel.GetPreferenceVideoModel().previewStreamType
   }
 
   takeSnapShot(user: DemoUser) {
     try {
-      let streamType = user.userCheckIsMainStream() ? '_main' : '_sub'
+      let streamType = '_main'
+      if(user.multiStream == null){
+        streamType = user.userCheckIsMainStream() ? '_main' : '_sub'
+      }else{
+        streamType = "_" + user.multiStream
+      }
       let fileName = String(user.uid) + "_" + systemDateTime.getTime() + streamType + ".jpg"
       const path: string = getContext().filesDir + "/" + fileName + ".jpg"
       console.info(TAG, `path: ` + path)
+      let streamTypeSnap = NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeMain
+      if(user.multiStream == null){
+        if(user.userCheckIsMainStream())
+          streamTypeSnap = NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeMain
+        else
+          streamTypeSnap = NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeSub
+      }else{
+        if(user.multiStream == "third")
+          streamTypeSnap = NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeThird
+        else
+          streamTypeSnap = NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeFourth
+      }
       if(user.local) {
-        NERtcSDK.getInstance().takeLocalSnapshot(user.userCheckIsMainStream() ? NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeMain : NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeSub, {
+        NERtcSDK.getInstance().takeLocalSnapshot(streamTypeSnap, {
           onTakeSnapshotResult: (errorCode: number, image_?: PixelMap | undefined) => {
             this.saveSnapshotEncapsulation(errorCode, image_, path);
           }
         })
       } else {
-        NERtcSDK.getInstance().takeRemoteSnapshot(user.uid, user.userCheckIsMainStream() ? NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeMain : NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeSub, {
+        NERtcSDK.getInstance().takeRemoteSnapshot(user.uid, streamTypeSnap, {
           onTakeSnapshotResult: (errorCode: number, image_?: PixelMap | undefined) => {
             this.saveSnapshotEncapsulation(errorCode, image_, path)
           }
@@ -1406,25 +1733,60 @@ export default class ChatPresenter extends NERtcCallbackEx {
 
   changeCanvasStyle(user: DemoUser): void {
 
-    let mirrorMode: number = user.getCanvasMirror() ? NERtcConstants.NERtcVideoMirrorMode.kNERtcVideoMirrorModeEnabled :
-      NERtcConstants.NERtcVideoMirrorMode.kNERtcVideoMirrorModeDisabled
-    let scaleMode = user.getScaleMode()
+    let useExternalRender = this.rtcDemoLogicModel.GetPreferenceOtherModel().useExternalRender
 
-    if(user.local) {
-      if(user.userCheckIsMainStream()) {
-        NERtcSDK.getInstance().setupLocalVideoCanvas({ canvasId: user.xComponentIdMain, mirrorMode: mirrorMode, scalingMode: scaleMode })
+    let scaleMode = user.getScaleMode()
+    if (!useExternalRender) {
+
+      let mirrorMode = NERtcConstants.NERtcVideoMirrorMode.kNERtcVideoMirrorModeAuto
+      let mirror = user.getCanvasMirror()
+      if (mirror != null) {
+        mirrorMode = mirror ? NERtcConstants.NERtcVideoMirrorMode.kNERtcVideoMirrorModeEnabled : NERtcConstants.NERtcVideoMirrorMode.kNERtcVideoMirrorModeDisabled
+      }
+
+      let streamTypeStyle = NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeMain
+      if(user.multiStream == null){
+        if(user.userCheckIsMainStream())
+          streamTypeStyle = NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeMain
+        else
+          streamTypeStyle = NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeSub
+      }else{
+        if(user.multiStream == "third")
+          streamTypeStyle = NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeThird
+        else
+          streamTypeStyle = NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeFourth
+      }
+      if(user.local) {
+        if(streamTypeStyle == NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeMain) {
+          NERtcSDK.getInstance().setupLocalVideoCanvas({ canvasId: user.xComponentIdMain, mirrorMode: mirrorMode, scalingMode: scaleMode }, streamTypeStyle)
+        }else if(streamTypeStyle ==  NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeSub) {
+          NERtcSDK.getInstance().setupLocalSubStreamVideoCanvas({ canvasId: user.xComponentIdSub as string, mirrorMode: mirrorMode, scalingMode: scaleMode })
+        }else if(streamTypeStyle ==  NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeThird) {
+          NERtcSDK.getInstance().setupLocalVideoCanvas({ canvasId: user.xComponentIdThird as string, mirrorMode: mirrorMode, scalingMode: scaleMode }, streamTypeStyle)
+        }else if(streamTypeStyle == NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeFourth) {
+          NERtcSDK.getInstance().setupLocalVideoCanvas({ canvasId: user.xComponentIdFourth as string, mirrorMode: mirrorMode, scalingMode: scaleMode }, streamTypeStyle)
+        }
       } else {
-        NERtcSDK.getInstance().setupLocalSubStreamVideoCanvas({ canvasId: user.xComponentIdSub ?? '', mirrorMode: mirrorMode, scalingMode: scaleMode })
+        if(user.userCheckIsMainStream()) {
+          NERtcSDK.getInstance().setupRemoteVideoCanvas({ canvasId: user.xComponentIdMain, mirrorMode: mirrorMode, scalingMode: scaleMode }, user.uid, streamTypeStyle)
+        } else {
+          NERtcSDK.getInstance().setupRemoteSubStreamVideoCanvas({ canvasId: user.xComponentIdSub ?? '', mirrorMode: mirrorMode, scalingMode: scaleMode }, user.uid)
+        }
       }
     } else {
-      if(user.userCheckIsMainStream()) {
-        NERtcSDK.getInstance().setupRemoteVideoCanvas({ canvasId: user.xComponentIdMain, mirrorMode: mirrorMode, scalingMode: scaleMode }, user.uid)
-      } else {
-        NERtcSDK.getInstance().setupRemoteSubStreamVideoCanvas({ canvasId: user.xComponentIdSub ?? '', mirrorMode: mirrorMode, scalingMode: scaleMode }, user.uid)
+      //外部渲染场景
+
+      let mirrorMode = -1
+      let mirror = user.getCanvasMirror()
+      if (mirror != null) {
+        mirrorMode = mirror ? 1 : 0
       }
+      if (this.videoRender == null)
+        this.videoRender = new VideoRenderProcessing()
+      let xcomponment_id = user.userCheckIsMainStream() ? user.xComponentIdMain : user.xComponentIdSub
+      this.videoRender.changeCanvasStyle(xcomponment_id, mirrorMode, scaleMode)
     }
   }
-
 
   subscribeAllAudio(enabled: boolean): void {
     let ret: number = NERtcSDK.getInstance().subscribeAllRemoteAudioStreams(enabled)
@@ -1458,9 +1820,10 @@ export default class ChatPresenter extends NERtcCallbackEx {
     let volumeDuration = 200
     let vad = false
 
-    if(gAudioModel) {
-      volumeDuration = gAudioModel.captureVolumeIndicationDuration
-      vad = gAudioModel.captureVolumeVAD
+    const audioModel = this.rtcDemoLogicModel.GetPreferenceAudioModel()
+    if(audioModel) {
+      volumeDuration = audioModel.captureVolumeIndicationDuration
+      vad = audioModel.captureVolumeVAD
     }
 
     let ret: number = NERtcSDK.getInstance().enableAudioVolumeIndication(enabled, BigInt(volumeDuration), vad)
@@ -1472,28 +1835,29 @@ export default class ChatPresenter extends NERtcCallbackEx {
   enablePushExternalAudioInput(enabled: boolean): boolean {
 
     //Fix crash for OMNRTCG2-58947.
-    if(!gAudioModel.externalAudioInputUrl || gAudioModel.externalAudioInputUrl == '') {
+    const audioModel = this.rtcDemoLogicModel.GetPreferenceAudioModel()
+    if(!audioModel.externalAudioInputUrl || audioModel.externalAudioInputUrl == '') {
       Prompt.showToast({ message: '请设置外部音频输入路径'})
       return false
     }
 
-    if(gAudioModel.externalAudioInputChannelNum == 0 || gAudioModel.externalAudioInputSampleRate == 0) {
+    if(audioModel.externalAudioInputChannelNum == 0 || audioModel.externalAudioInputSampleRate == 0) {
       Prompt.showToast({ message: '外部音频输入参数错误'})
       return false
     }
 
     if(enabled) {
-      let inputFile = gAudioModel.externalAudioInputUrl.split("/")
+      let inputFile = audioModel.externalAudioInputUrl.split("/")
       let fileName = inputFile[inputFile.length - 1]
 
       let type: number = NERtcConstants.NERtcAudioStreamType.kNERtcAudioStreamTypeMain
       if(!this.externalAudioSourceMain) {
-        this.externalAudioSourceMain = new ExternalPcmSource(Product.RTC_DEMO, type, fileName, gAudioModel.externalAudioInputSampleRate, gAudioModel.externalAudioInputChannelNum)
+        this.externalAudioSourceMain = new ExternalPcmSource(Product.RTC_DEMO, type, fileName, audioModel.externalAudioInputSampleRate, audioModel.externalAudioInputChannelNum)
       }
       if(NERtcSDK.getInstance().enableLocalAudio(false) != NERtcConstants.ErrorCode.NO_ERROR) {
         return false
       }
-      if(NERtcSDK.getInstance().setExternalAudioSource(true, gAudioModel.externalAudioInputSampleRate, gAudioModel.externalAudioInputChannelNum) != NERtcConstants.ErrorCode.NO_ERROR) {
+      if(NERtcSDK.getInstance().setExternalAudioSource(true, audioModel.externalAudioInputSampleRate, audioModel.externalAudioInputChannelNum) != NERtcConstants.ErrorCode.NO_ERROR) {
         return false
       }
       if(NERtcSDK.getInstance().enableLocalAudio(true) != NERtcConstants.ErrorCode.NO_ERROR) {
@@ -1514,7 +1878,7 @@ export default class ChatPresenter extends NERtcCallbackEx {
       if(NERtcSDK.getInstance().enableLocalAudio(false) != NERtcConstants.ErrorCode.NO_ERROR) {
         return false
       }
-      if(NERtcSDK.getInstance().setExternalAudioSource(false, gAudioModel.externalAudioInputSampleRate, gAudioModel.externalAudioInputChannelNum) != NERtcConstants.ErrorCode.NO_ERROR) {
+      if(NERtcSDK.getInstance().setExternalAudioSource(false, audioModel.externalAudioInputSampleRate, audioModel.externalAudioInputChannelNum) != NERtcConstants.ErrorCode.NO_ERROR) {
         return false
       }
       if(NERtcSDK.getInstance().enableLocalAudio(true) == NERtcConstants.ErrorCode.NO_ERROR) {
@@ -1529,26 +1893,27 @@ export default class ChatPresenter extends NERtcCallbackEx {
 
   enablePushSubExternalAudioInput(enabled: boolean): boolean {
 
-    if(gAudioModel.externalSubAudioInputUrl == '') {
+    const audioModel = this.rtcDemoLogicModel.GetPreferenceAudioModel()
+    if(audioModel.externalSubAudioInputUrl == '') {
       Prompt.showToast({ message: '请设置外部音频输入路径'})
       return false
     }
 
-    if(gAudioModel.externalSubAudioInputSampleRate == 0 || gAudioModel.externalSubAudioInputChannelNum == 0) {
+    if(audioModel.externalSubAudioInputSampleRate == 0 || audioModel.externalSubAudioInputChannelNum == 0) {
       Prompt.showToast({ message: '外部音频输入参数错误'})
       return false
     }
 
     if(enabled) {
-      let inputFile = gAudioModel.externalSubAudioInputUrl.split("/")
+      let inputFile = audioModel.externalSubAudioInputUrl.split("/")
       let fileName = inputFile[inputFile.length - 1]
 
       let type: number = NERtcConstants.NERtcAudioStreamType.kNERtcAudioStreamTypeSub
       if(!this.externalAudioSourceSub) {
-        this.externalAudioSourceSub = new ExternalPcmSource(Product.RTC_DEMO, type, fileName, gAudioModel.externalSubAudioInputSampleRate, gAudioModel.externalSubAudioInputChannelNum)
+        this.externalAudioSourceSub = new ExternalPcmSource(Product.RTC_DEMO, type, fileName, audioModel.externalSubAudioInputSampleRate, audioModel.externalSubAudioInputChannelNum)
       }
       if(NERtcSDK.getInstance().enableLocalSubStreamAudio(false) != NERtcConstants.ErrorCode.NO_ERROR) return false
-      if(NERtcSDK.getInstance().setExternalSubStreamAudioSource(true, gAudioModel.externalSubAudioInputSampleRate, gAudioModel.externalSubAudioInputChannelNum) != NERtcConstants.ErrorCode.NO_ERROR) return false
+      if(NERtcSDK.getInstance().setExternalSubStreamAudioSource(true, audioModel.externalSubAudioInputSampleRate, audioModel.externalSubAudioInputChannelNum) != NERtcConstants.ErrorCode.NO_ERROR) return false
       if(NERtcSDK.getInstance().enableLocalSubStreamAudio(true) != NERtcConstants.ErrorCode.NO_ERROR) return false
 
       /**
@@ -1562,7 +1927,7 @@ export default class ChatPresenter extends NERtcCallbackEx {
       Prompt.showToast({ message: '外部音频辅流启动成功'})
     } else {
       if(NERtcSDK.getInstance().enableLocalSubStreamAudio(false) != NERtcConstants.ErrorCode.NO_ERROR) return false
-      if(NERtcSDK.getInstance().setExternalSubStreamAudioSource(false, gAudioModel.externalSubAudioInputSampleRate, gAudioModel.externalSubAudioInputChannelNum) != NERtcConstants.ErrorCode.NO_ERROR) return false
+      if(NERtcSDK.getInstance().setExternalSubStreamAudioSource(false, audioModel.externalSubAudioInputSampleRate, audioModel.externalSubAudioInputChannelNum) != NERtcConstants.ErrorCode.NO_ERROR) return false
       this.externalAudioSourceSub?.stop()
       this.externalAudioSourceSub = null
       Prompt.showToast({ message: '外部音频辅流关闭成功'})
@@ -1572,22 +1937,23 @@ export default class ChatPresenter extends NERtcCallbackEx {
 
   enablePushExternalVideoInput(enabled: boolean): boolean {
 
-    if(gVideoModel.externalVideoType != 0){
+    const videoModel = this.rtcDemoLogicModel.GetPreferenceVideoModel()
+    if(videoModel.externalVideoType != 0){
       Prompt.showToast({ message: '文件类型目前仅支持YUV420P'})
       return false
     }
 
-    if(gVideoModel.externalVideoPath == '') {
+    if(videoModel.externalVideoPath == '') {
       Prompt.showToast({ message: '请设置外部输入文件路径'})
       return false
     }
 
     if(enabled) {
 
-      let inputFile = gVideoModel.externalVideoPath.split('/')
+      let inputFile = videoModel.externalVideoPath.split('/')
       let fileName = inputFile[inputFile.length - 1]
       if(!this.externalVideoSourceMain) {
-        this.externalVideoSourceMain = new ExternalYuvVideoSource(Product.RTC_DEMO, NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeMain, fileName, gVideoModel.externalVideoWidth, gVideoModel.externalVideoHeight, gVideoModel.externalVideoFrameRate, gVideoModel.externalVideoRotation)
+        this.externalVideoSourceMain = new ExternalYuvVideoSource(Product.RTC_DEMO, NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeMain, fileName, videoModel.externalVideoWidth, videoModel.externalVideoHeight, videoModel.externalVideoFrameRate, videoModel.externalVideoRotation)
       }
 
       if(NERtcSDK.getInstance().enableLocalVideo(false, NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeMain) != NERtcConstants.ErrorCode.NO_ERROR){
@@ -1633,25 +1999,35 @@ export default class ChatPresenter extends NERtcCallbackEx {
     return true
   }
 
+  sendSEI() {
+    let sendMsg: string = '发送SEI:' + this.seiIndex++
+    const encoder = new util.TextEncoder()
+    let uint8Array = encoder.encodeInto(sendMsg)
+    let ret = NERtcSDK.getInstance().sendSEIMsg(uint8Array, uint8Array.length)
+    console.info(TAG, `SendSEIMsg: ret:${ret}`)
+  }
 
   enableSubPushExternalVideoInput(enabled: boolean): boolean {
 
-    if(gVideoModel.externalSubVideoType != 0){
+    const videoModel = this.rtcDemoLogicModel.GetPreferenceVideoModel()
+    const localUser = this.rtcDemoLogicModel.GetLocalDemoUser()
+
+    if(videoModel.externalSubVideoType != 0){
       Prompt.showToast({ message: '文件类型目前仅支持YUV420P'})
       return false
     }
 
-    if(gVideoModel.externalSubVideoPath == '') {
+    if(videoModel.externalSubVideoPath == '') {
       Prompt.showToast({ message: '请设置外部输入文件路径'})
       return false
     }
 
     if(enabled) {
 
-      let inputFile = gVideoModel.externalSubVideoPath.split('/')
+      let inputFile = videoModel.externalSubVideoPath.split('/')
       let fileName = inputFile[inputFile.length - 1]
       if(!this.externalVideoSourceSub) {
-        this.externalVideoSourceSub = new ExternalYuvVideoSource(Product.RTC_DEMO, NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeSub, fileName, gVideoModel.externalSubVideoWidth, gVideoModel.externalSubVideoHeight, gVideoModel.externalSubVideoFrameRate, gVideoModel.externalSubVideoRotation)
+        this.externalVideoSourceSub = new ExternalYuvVideoSource(Product.RTC_DEMO, NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeSub, fileName, videoModel.externalSubVideoWidth, videoModel.externalSubVideoHeight, videoModel.externalSubVideoFrameRate, videoModel.externalSubVideoRotation)
       }
 
       if(NERtcSDK.getInstance().enableLocalVideo(false, NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeSub) != NERtcConstants.ErrorCode.NO_ERROR){
@@ -1676,12 +2052,12 @@ export default class ChatPresenter extends NERtcCallbackEx {
       }
 
       let result = this.externalVideoSourceSub.start()
-      if(result && this.localUser) {
+      if(result && localUser) {
         Prompt.showToast({ message: '外部辅流视频输入开启成功' })
-        let canvasId = this.localUser.generatorSubCanvasId();
-        this.localUser.xComponentIdSub = canvasId
-        delegates_?.forEach(delegate_ => {
-          delegate_?.update(OPERATOR.UPD, DemoUser.newInstance(this.localUser))
+        let canvasId = localUser.generatorSubCanvasId();
+        localUser.xComponentIdSub = canvasId
+        this.rtcDemoLogicModel.GetDelegates().forEach(delegate => {
+          delegate.update(OPERATOR.UPD, DemoUser.newInstance(localUser))
         })
       }
     } else {
@@ -1697,10 +2073,160 @@ export default class ChatPresenter extends NERtcCallbackEx {
         console.info(TAG, 'open camera success')
       }
       Prompt.showToast({ message: '外部辅流视频输入关闭成功'})
-      if(this.localUser) {
-        this.localUser.xComponentIdSub = undefined
-        delegates_?.forEach(delegate_ => {
-          delegate_?.update(OPERATOR.UPD, DemoUser.newInstance(this.localUser))
+      if(localUser) {
+        localUser.xComponentIdSub = undefined
+        this.rtcDemoLogicModel.GetDelegates().forEach(delegate => {
+          delegate.update(OPERATOR.UPD, DemoUser.newInstance(localUser))
+        })
+      }
+    }
+    return true
+  }
+
+  enableThirdPushExternalVideoInput(enabled: boolean): boolean {
+
+    const multiVideoModel = this.rtcDemoLogicModel.GetPreferenceMultiVideoModel()
+    const localUser = this.rtcDemoLogicModel.GetLocalDemoUser()
+
+    if(multiVideoModel.externalThirdVideoType != 0){
+      Prompt.showToast({ message: '文件类型目前仅支持YUV420P'})
+      return false
+    }
+
+    if(multiVideoModel.externalThirdVideoPath == '') {
+      Prompt.showToast({ message: '请设置外部输入文件路径'})
+      return false
+    }
+    let user = new DemoUser(localUser?.uid as bigint, true, "third");
+    if(enabled) {
+
+      let inputFile = multiVideoModel.externalThirdVideoPath.split('/')
+      let fileName = inputFile[inputFile.length - 1]
+      if(!this.externalVideoSourceThird) {
+        this.externalVideoSourceThird = new ExternalYuvVideoSource(Product.RTC_DEMO, NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeThird, fileName, multiVideoModel.externalThirdVideoWidth, multiVideoModel.externalThirdVideoHeight, multiVideoModel.externalThirdVideoFrameRate, multiVideoModel.externalThirdVideoRotation)
+      }
+
+      if(NERtcSDK.getInstance().enableLocalVideo(false, NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeThird) != NERtcConstants.ErrorCode.NO_ERROR){
+        return false
+      }
+
+      if(NERtcSDK.getInstance().setExternalVideoSource(true, NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeThird) != NERtcConstants.ErrorCode.NO_ERROR) {
+        return false
+      }
+
+      if(NERtcSDK.getInstance().enableLocalVideo(true, NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeThird) != NERtcConstants.ErrorCode.NO_ERROR) {
+        return false
+      }
+
+
+      /**
+       * @see Overmind-id: OMNRTCG2-57526
+       */
+      if(this.videoThirdEncodedSource) {
+        this.videoThirdEncodedSource.stop()
+        this.videoThirdEncodedSource = undefined
+      }
+      let result = this.externalVideoSourceThird.start()
+      if(result && localUser) {
+        Prompt.showToast({ message: '外部辅流视频输入开启成功' })
+        let canvasId = localUser.generatorThirdCanvasId();
+        localUser.xComponentIdThird = canvasId
+        this.rtcDemoLogicModel.GetDelegates().forEach(delegate => {
+          delegate.update(OPERATOR.ADD, user);
+        })
+      }
+    } else {
+      if(NERtcSDK.getInstance().enableLocalVideo(false, NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeThird) != NERtcConstants.ErrorCode.NO_ERROR) {
+        return false
+      }
+      if(NERtcSDK.getInstance().setExternalVideoSource(false, NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeThird) != NERtcConstants.ErrorCode.NO_ERROR) {
+        return false
+      }
+      this.externalVideoSourceThird?.stop()
+      this.externalVideoSourceThird = null
+      if(NERtcSDK.getInstance().enableLocalVideo(true, NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeThird) == NERtcConstants.ErrorCode.NO_ERROR) {
+        console.info(TAG, 'open camera success')
+      }
+      Prompt.showToast({ message: '外部辅流视频输入关闭成功'})
+      if(localUser) {
+        localUser.xComponentIdThird = undefined
+        this.rtcDemoLogicModel.GetDelegates().forEach(delegate => {
+          delegate.update(OPERATOR.DEL, user);
+        })
+      }
+    }
+    return true
+  }
+
+  enableFourthPushExternalVideoInput(enabled: boolean): boolean {
+
+    const multiVideoModel = this.rtcDemoLogicModel.GetPreferenceMultiVideoModel()
+    const localUser = this.rtcDemoLogicModel.GetLocalDemoUser()
+    if(multiVideoModel.externalFourthVideoType != 0){
+      Prompt.showToast({ message: '文件类型目前仅支持YUV420P'})
+      return false
+    }
+
+    if(multiVideoModel.externalFourthVideoPath == '') {
+      Prompt.showToast({ message: '请设置外部输入文件路径'})
+      return false
+    }
+    let user = new DemoUser(localUser?.uid as bigint, true, "fourth");
+    if(enabled) {
+
+      let inputFile = multiVideoModel.externalFourthVideoPath.split('/')
+      let fileName = inputFile[inputFile.length - 1]
+      if(!this.externalVideoSourceFourth) {
+        this.externalVideoSourceFourth = new ExternalYuvVideoSource(Product.RTC_DEMO, NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeFourth, fileName, multiVideoModel.externalFourthVideoWidth, multiVideoModel.externalFourthVideoHeight, multiVideoModel.externalFourthVideoFrameRate, multiVideoModel.externalFourthVideoRotation)
+      }
+
+      if(NERtcSDK.getInstance().enableLocalVideo(false, NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeFourth) != NERtcConstants.ErrorCode.NO_ERROR){
+        return false
+      }
+
+      if(NERtcSDK.getInstance().setExternalVideoSource(true, NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeFourth) != NERtcConstants.ErrorCode.NO_ERROR) {
+        return false
+      }
+
+      if(NERtcSDK.getInstance().enableLocalVideo(true, NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeFourth) != NERtcConstants.ErrorCode.NO_ERROR) {
+        return false
+      }
+
+
+      /**
+       * @see Overmind-id: OMNRTCG2-57526
+       */
+      if(this.videoFourthEncodedSource) {
+        this.videoFourthEncodedSource.stop()
+        this.videoFourthEncodedSource = undefined
+      }
+
+      let result = this.externalVideoSourceFourth.start()
+      if(result && localUser) {
+        Prompt.showToast({ message: '外部辅流视频输入开启成功' })
+        let canvasId = localUser.generatorFourthCanvasId();
+        localUser.xComponentIdFourth = canvasId
+        this.rtcDemoLogicModel.GetDelegates().forEach(delegate => {
+          delegate.update(OPERATOR.ADD, user);
+        })
+      }
+    } else {
+      if(NERtcSDK.getInstance().enableLocalVideo(false, NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeFourth) != NERtcConstants.ErrorCode.NO_ERROR) {
+        return false
+      }
+      if(NERtcSDK.getInstance().setExternalVideoSource(false, NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeFourth) != NERtcConstants.ErrorCode.NO_ERROR) {
+        return false
+      }
+      this.externalVideoSourceFourth?.stop()
+      this.externalVideoSourceFourth = null
+      if(NERtcSDK.getInstance().enableLocalVideo(true, NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeFourth) == NERtcConstants.ErrorCode.NO_ERROR) {
+        console.info(TAG, 'open camera success')
+      }
+      Prompt.showToast({ message: '外部辅流视频输入关闭成功'})
+      if(localUser) {
+        localUser.xComponentIdFourth = undefined
+        this.rtcDemoLogicModel.GetDelegates().forEach(delegate => {
+          delegate.update(OPERATOR.DEL, user);
         })
       }
     }
@@ -1724,6 +2250,43 @@ export default class ChatPresenter extends NERtcCallbackEx {
     }
   }
 
+  setRemoteAudioHighPriority(uid: bigint, enable: boolean) {
+    let ret = NERtcSDK.getInstance().setRemoteHighPriorityAudioStream(enable, uid)
+    Prompt.showToast({ message: `设置音频高优先级 uid:${uid}, enable:${enable}, ret:${ret}`})
+  }
+
+  enterPK(cname: string, remoteUid: string): number {
+    let ret = LiveStreamingKit.getInstance().enterPK(cname, login_.token, login_.uid, remoteUid)
+    return ret;
+  }
+
+  enterSeat(remoteUid: string): number {
+    let ret = LiveStreamingKit.getInstance().enterSeat(login_.uid, remoteUid)
+    return ret;
+  }
+
+  leavePK(): number {
+    let ret = LiveStreamingKit.getInstance().leavePK()
+    return ret;
+  }
+
+  leaveSeat(): number {
+    let ret = LiveStreamingKit.getInstance().leaveSeat()
+    return ret;
+  }
+
+  switchChannel(cname: string) {
+    this.rtcDemoLogicModel.SetSwitchChannelName(cname)
+    console.info(TAG, `switchChannel: ${cname}`)
+    let ret = NERtcSDK.getInstance().switchChannel('', cname)
+    Prompt.showToast({ message: `切换房间 cname: ${cname}, ret: ${ret}`})
+  }
+
+  aiManualInterrupt(dstUid: bigint) {
+    let ret = NERtcSDK.getInstance().aiManualInterrupt(dstUid)
+    Prompt.showToast({ message: `ai打断 uid: ${dstUid}, ret: ${ret}`})
+  }
+
   switchCamera() {
     let ret: number = NERtcSDK.getInstance().switchCamera()
     Prompt.showToast({ message: `切换摄像头:${ret == NERtcConstants.ErrorCode.NO_ERROR ? '成功':'失败'}`})
@@ -1731,11 +2294,12 @@ export default class ChatPresenter extends NERtcCallbackEx {
 
   enableAudioFrameObserver(enable: boolean): void {
 
-    if(gAudioModel) {
+    const audioModel = this.rtcDemoLogicModel.GetPreferenceAudioModel()
+    if(audioModel) {
       let format: NERtcConstants.NERtcAudioFrameRequestFormat = new NERtcConstants.NERtcAudioFrameRequestFormat
-      format.channels = gAudioModel.audioCallbackChannel
-      format.sampleRate = gAudioModel.audioCallbackSampleRate
-      format.opMode = gAudioModel.audioCallbackReadOnly ? NERtcConstants.NERtcAudioFrameOpMode.kNERtcAudioFrameOpModeReadOnly : NERtcConstants.NERtcAudioFrameOpMode.kNERtcAudioFrameOpModeReadWrite
+      format.channels = audioModel.audioCallbackChannel
+      format.sampleRate = audioModel.audioCallbackSampleRate
+      format.opMode = audioModel.audioCallbackReadOnly ? NERtcConstants.NERtcAudioFrameOpMode.kNERtcAudioFrameOpModeReadOnly : NERtcConstants.NERtcAudioFrameOpMode.kNERtcAudioFrameOpModeReadWrite
       NERtcSDK.getInstance().setMixedAudioFrameParameters(format)
       NERtcSDK.getInstance().setPlaybackAudioFrameParameters(format)
       NERtcSDK.getInstance().setRecordingAudioFrameParameters(format)
@@ -1759,12 +2323,46 @@ export default class ChatPresenter extends NERtcCallbackEx {
 
   enableVideoFrameObserver(enable: boolean): void {
     let result: number = NERtcConstants.ErrorCode.NO_ERROR;
-    if (enable) {
-      this.videoFrameObserver.setFileDir(this.dir!);
-      result = NERtcSDK.getInstance().setVideoFrameObserver(this.videoFrameObserver);
+
+    const videoModel = this.rtcDemoLogicModel.GetPreferenceVideoModel()
+    let index = 0
+    if(videoModel) {
+      index = videoModel.openVideoFrameObserverWays
+    }
+
+    if(index == 0) {
+      //typescript
+      if (enable) {
+        this.videoFrameObserver.setFileDir(this.dir!);
+        result = NERtcSDK.getInstance().setVideoFrameObserver(this.videoFrameObserver);
+      } else {
+        result = NERtcSDK.getInstance().setVideoFrameObserver(null);
+        this.videoFrameObserver.clearUp();
+      }
     } else {
-      result = NERtcSDK.getInstance().setVideoFrameObserver(null);
-      this.videoFrameObserver.clearUp();
+      //c++
+      if(this.videoProcess == null) {
+        this.videoProcess = new VideoCaptureProcessing()
+      }
+
+      if(enable) {
+        let filePath = this.dir! + "/VideoFrameObserver"
+        console.info(TAG, `Last save file path: ${filePath}`)
+        try {
+          if(!fs.accessSync(filePath)) {
+            fs.mkdirSync(filePath)
+          }
+        } catch (e) {
+          console.error(TAG, `create folder failed: ${JSON.stringify(e)}`)
+        }
+        this.videoProcess.setFilePath(filePath)
+        let ptr = this.videoProcess.getNativeHandle()
+        console.info(TAG, `Get VideoProcess ptr: ${ptr.toString(16)}`)
+        let result = NERtcSDK.getInstance().setExternalVideoProcessPlugin(ptr)
+        console.info(TAG, `Set External video process plugin: ${result}`)
+      } else {
+        NERtcSDK.getInstance().setExternalVideoProcessPlugin(BigInt(0))
+      }
     }
     if (enable) {
       Prompt.showToast({ message: `视频数据回调已开启, result:${result}` });
@@ -1791,11 +2389,12 @@ export default class ChatPresenter extends NERtcCallbackEx {
   enableLastMileProbe(enabled: boolean): number {
 
     let ret: number = NERtcConstants.ErrorCode.NO_ERROR
+    const otherModel = this.rtcDemoLogicModel.GetPreferenceOtherModel()
     if(enabled) {
-      let upBitRate = gOtherModel.upLinkBitRate
-      let downBitRate = gOtherModel.downLinkBitRate
-      let upLinkProbe = gOtherModel.upLinkProbe
-      let downLinkProbe = gOtherModel.downLinkProbe
+      let upBitRate = otherModel.upLinkBitRate
+      let downBitRate = otherModel.downLinkBitRate
+      let upLinkProbe = otherModel.upLinkProbe
+      let downLinkProbe = otherModel.downLinkProbe
 
       let config: NERtcConstants.NERtcLastmileProbeConfig = {
         probeUplink: upLinkProbe,
@@ -1814,11 +2413,57 @@ export default class ChatPresenter extends NERtcCallbackEx {
     return ret
   }
 
+  queryVirtualBackgroundSupport(): void {
+    let result = NERtcSDK.getInstance().getFeatureSupportedType(NERtcConstants.NERtcFeatureType.VIRTUAL_BACKGROUND)
+    if (result != NERtcConstants.ErrorCode.ENGINE_ERROR_INVALID_STATE) {
+      if (result == NERtcConstants.NERtcFeatureSupportType.FEATURE_SUPPORT_FULL) {
+        Prompt.showToast({ message: '虚拟背景支持'})
+      } else if (result == NERtcConstants.NERtcFeatureSupportType.FEATURE_SUPPORT_HARDWARE_LIMIT) {
+        Prompt.showToast({ message: '由于硬件原因，虚拟背景不支持'})
+      } else if (result == NERtcConstants.NERtcFeatureSupportType.FEATURE_SUPPORT_PERFORMANCE_LIMIT) {
+        Prompt.showToast({ message: '设备性能不足，但是您仍然可通过强制开启来打开'})
+      }
+    } else {
+      Prompt.showToast({ message: '引擎状态错误!' })
+    }
+  }
+
+  startMediaRelay(channelNames: Array<string>, update: boolean) {
+    console.info(TAG, `startChannelMediaRelay, channelNames: ${channelNames}`)
+    let destMediaInfoArray = new Array<NERtcConstants.NERtcChannelMediaRelayInfo>()
+    channelNames.forEach(channel => {
+      if (channel !== '') {
+        let destMediaInfo: NERtcConstants.NERtcChannelMediaRelayInfo = {
+          uid: BigInt(login_.uid),
+          channelName: channel,
+          token: ''
+        }
+        destMediaInfoArray.push(destMediaInfo)
+      }
+    })
+    let config : NERtcConstants.NERtcChannelMediaRelayConfiguration = {
+      destMediaInfoArray: destMediaInfoArray
+    }
+    let ret: number;
+    if (update) {
+      ret = NERtcSDK.getInstance().updateChannelMediaRelay(config)
+      console.info(TAG, `updateChannelMediaRelay ret:${ret}`)
+    } else {
+      ret = NERtcSDK.getInstance().startChannelMediaRelay(config)
+      console.info(TAG, `startChannelMediaRelay ret:${ret}`)
+    }
+  }
+
+  stopMediaRelay() {
+    let ret = NERtcSDK.getInstance().stopChannelMediaRelay()
+    console.info(TAG, `stopChannelMediaRelay ret:${ret}`)
+  }
+
   release() {
     NERtcSDK.getInstance().setStatsObserver(null)
     NERtcSDK.getInstance().release()
     console.info(TAG, 'Call release done.')
-    this.localUser = null
+    this.rtcDemoLogicModel.UpdateLocalDemoUser(null)
     this.isAudioFrameObserverEnabled = false;
     this.isVideoFrameObserverEnabled = false;
     this.audioFrameObserver.clearUp();
