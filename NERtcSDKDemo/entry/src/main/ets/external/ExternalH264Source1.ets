@@ -44,8 +44,8 @@ export default class PushExternalH264Video {
   private buffer?: Uint8Array
   private size: number = 0
   private curPos: number = 0
-  private file?: fs.File
-  private randomFile?: fs.RandomAccessFile
+  private file : fs.File|null = null
+  private randomFile : fs.RandomAccessFile|null = null
   private nalu_vec: Array<Nalu> = new Array<Nalu>()
   private complete: boolean = false
   private index: number = 0
@@ -223,7 +223,11 @@ export default class PushExternalH264Video {
     this.index = 0
     this.lens = 0
     this.randomFile?.close()
-    fs.close(this.file)
+    this.randomFile = null
+    if (this.file) {
+      fs.closeSync(this.file)
+    }
+    this.file = null
     return true
   }
 

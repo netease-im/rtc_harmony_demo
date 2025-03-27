@@ -10,6 +10,10 @@ import * as ModelUtil from './ModelHandleUtils'
 import Config from "../../common/Config"
 import DemoUser from "../../model/DemoUser"
 
+class ModelState {
+  public beauty: boolean = false //美颜状态
+}
+
 export default class RtcLogicModel {
 
   private TAG: string = 'RtcLogicModel'
@@ -32,6 +36,9 @@ export default class RtcLogicModel {
   private privateKey: string = ''
   private privateAddress: NERtcConstants.NERtcServerAddress|null = null
   private privateTokenUrl: string = ''
+
+  // state in memory.
+  private modelState: ModelState|null = null
 
   LoadDataModel(context: Context) {
     let options: preferences.Options = { name: 'netease_settings' }
@@ -76,6 +83,12 @@ export default class RtcLogicModel {
       this.privateKey = ''
       this.privateTokenUrl = ''
     }
+    if (this.modelState == null)
+      this.modelState = new ModelState()
+  }
+
+  GetModelState(): ModelState {
+    return this.modelState!!;
   }
 
   UpdatePushStreamUid(uid: bigint) {

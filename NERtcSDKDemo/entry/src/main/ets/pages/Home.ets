@@ -157,6 +157,17 @@ struct Home {
         this.copyVirtualBackgroundResources(dir, file_name);
       }
 
+      //copy beauty.
+      let beautyDir: string = getContext(this).filesDir + "/beauty"
+      if (!fs.accessSync(beautyDir)) {
+        fs.mkdirSync(beautyDir)
+        console.info(this.TAG, '=== Beauty dir mkdir ===')
+      }
+
+      this.copyAssets(beautyDir, 'ai_face_processor.bundle')
+      this.copyAssets(beautyDir, 'face_beautification.bundle')
+      this.copyAssets(beautyDir, 'ai_human_processor.bundle')
+      this.copyAssets(beautyDir, 'face_makeup.bundle')
     } catch (e) {
       console.info(this.TAG, 'copy asserts failed.')
     } finally {
@@ -371,7 +382,9 @@ struct Home {
     let options: http.HttpRequestOptions = {
       method: http.RequestMethod.POST,
       readTimeout: 5000,
-      expectDataType: http.HttpDataType.STRING
+      connectTimeout: 5000,
+      expectDataType: http.HttpDataType.STRING,
+      usingCache: false
     }
 
     try {
@@ -393,9 +406,14 @@ struct Home {
             this.joinRoomDialog.close()
           }
         }
+      }).catch((err: Error) => {
+        console.info(this.TAG, `err:${JSON.stringify(err)}`)
+        Prompt.showToast({ message: `err:${JSON.stringify(err)}`})
+        this.joinRoomDialog.close();
       })
     } catch (e) {
       Prompt.showToast({ message: `请求token失败，${JSON.stringify(e)}`})
+      this.joinRoomDialog.close()
     }
   }
 
@@ -470,6 +488,7 @@ struct Home {
 
     this.InitRtcEngine()
     let ret = SDK.getInstance().startPushStreaming({ cname: this.cname, uid: this.uid })
+    SDK.getInstance().onStartPushStreaming(BigInt(0))
     if(ret != NERtcConstants.ErrorCode.NO_ERROR) {
       this.joinRoomDialog.close()
       prompt.showToast({ message: '融合推流失败, result: ' + ret, duration: 2000 })

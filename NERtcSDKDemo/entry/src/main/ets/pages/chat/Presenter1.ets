@@ -1,6 +1,6 @@
 import { NERtcConstants, NERtcSDK, NERtcCallbackEx} from '@nertc/nertc_sdk/Index';
 
-import { NERtcPacketObserver} from '@nertc/nertc_sdk';
+import { NERtcPacketObserver, NERtcAudioProcessObserver } from '@nertc/nertc_sdk';
 import DemoUser from '../../model/DemoUser';
 import { ChatState, LoginInfo } from './ChatModel';
 import UIDelegate, { OPERATOR } from './Delegate';
@@ -21,12 +21,14 @@ import { ExternalPcmSource } from '../../external/ExternalPcmSource';
 import { ExternalYuvVideoSource } from '../../external/ExternalYuvVideoSource';
 import { DemoNERtcPackageObserver } from './PackageObserver';
 import { DemoNERtcPreDecodeObserver } from './PreDecodeObserver';
-import { VideoCaptureProcessing, VideoRenderProcessing } from 'libdataprocessing.so'
+import { VideoCaptureProcessing, VideoFuRender, VideoRenderProcessing } from 'libdataprocessing.so'
 import { util } from '@kit.ArkTS';
 import LiveStreamingKit from '../LiveStreamingKit';
 import * as ModelUtil from './ModelHandleUtils'
 import RtcLogicDelegate from './RtcDefaultCallbackEx'
 import RtcLogicModel from './RtcLogicModel'
+import { BeautyDataService } from '../beauty/services/BeautyDataService';
+import { NERtcAIHowlingObserver } from './NERtcAIHowlingObserver';
 
 let TAG: string = 'MultiChat'
 let login_: LoginInfo;
@@ -78,6 +80,8 @@ export default class ChatPresenter {
   private seiIndex: number = 1
   private type: number = 0 //0:普通入房 1:融合推流
 
+  //相芯美颜
+  private fuRender: VideoFuRender|null = null
 
   private pushAddressArray: string[] = ["rtmp://pd3ab725c.live.126.net/live/8e79fc0763174fd28ee70e786da7d404?wsSecret=4293eb4624811a854e9abcee760f6ea6&wsTime=1684825921",
   "rtmp://p21058434.live.126.net/live/3a42421848534290908190606cb69d5a?wsSecret=fbc1224f7a3fd63db3584eb0aa6dad81&wsTime=1684825865",
@@ -190,7 +194,10 @@ export default class ChatPresenter {
   init(context: Context) {
     this.rtcDemoLogicModel.LoadDataModel(context)
     this.beforeInitEngineTask()
-    let option: NERtcConstants.NERtcOption = { logLevel: NERtcConstants.LogLevel.INFO }
+
+    let ipVersion: NERtcConstants.NERtcIPAddrMode = this.rtcDemoLogicModel.GetPreferenceOtherModel().ipVersionSetting; //default: ipv4
+    console.info(TAG, `User select ipVersion: ${ipVersion}`)
+    let option: NERtcConstants.NERtcOption = { logLevel: NERtcConstants.LogLevel.INFO, ipModelLevel: ipVersion }
     const appKey = this.rtcDemoLogicModel.GetDemoAppKey()
 
     //**** 私有化设置 ****
@@ -215,8 +222,18 @@ export default class ChatPresenter {
     }
   }
 
+  public onStartPushStreaming(channelId: bigint) {
+    this.rtcDemoLogicDelegate.onStartPushStreaming(0,channelId)
+  }
+
   private beforeInitEngineTask = (): void => {
     let param: object = new Object();
+
+    if (this.rtcDemoLogicModel.GetDemoDebugMode()) {
+      //云信内部使用字段，开发者不要使用。可申请两个appkey，一个作为生产环境，一个作为正式环境。
+      param["sdk.enable.debug.environment"] = true;
+    }
+
     const audioMode = this.rtcDemoLogicModel.GetPreferenceAudioModel()
     const videoMode = this.rtcDemoLogicModel.GetPreferenceVideoModel()
     const otherMode = this.rtcDemoLogicModel.GetPreferenceOtherModel()
@@ -225,6 +242,13 @@ export default class ChatPresenter {
     param["sdk.enable.encrypt.log"] = false;
     if (audioMode) {
       param[NERtcConstants.NERtcParameterKey.kNERtcKeyAutoSubscribeAudio] = audioMode.autoSubAudio
+      param['sdk.enable.ai.howling'] = audioMode.aiAudioHowling
+      if (audioMode.aiAudioHowling) {
+        let howlingObserver: NERtcAIHowlingObserver = new NERtcAIHowlingObserver(this.rtcDemoLogicModel)
+        NERtcSDK.getInstance().setAudioProcessObserver(howlingObserver)
+      } else {
+        NERtcSDK.getInstance().setAudioProcessObserver(null)
+      }
     }
     if (videoMode) {
       param[NERtcConstants.NERtcParameterKey.kNERtcKeyStartVideoWithBackCamera] = !videoMode.fontCamera
@@ -264,7 +288,6 @@ export default class ChatPresenter {
           ModelUtil.injectJsonValue(param, privateParam)
         }
       }
-
       NERtcSDK.getInstance().setParameters(param)
     }
   }
@@ -292,17 +315,22 @@ export default class ChatPresenter {
     }
 
     if (videoModel) {
-      //是否开启小流
-      NERtcSDK.getInstance().enableDualStreamMode(videoModel.mainEnableDualStream)
-      if (multiVideoModel) {
-        NERtcSDK.getInstance().enableDualStreamMode(multiVideoModel.thirdEnableDualStream)
-        NERtcSDK.getInstance().enableDualStreamMode(multiVideoModel.fourthEnableDualStream)
+      //是否开启小流'
+      let layer: NERtcConstants.NERtcVideoStreamLayerCount;
+      if(videoModel.enableDualStream == 0){
+        layer = NERtcConstants.NERtcVideoStreamLayerCount.kNERtcVideoStreamLayerCountOne
+      }else if(videoModel.enableDualStream == 1){
+        layer = NERtcConstants.NERtcVideoStreamLayerCount.kNERtcVideoStreamLayerCountTwo
+      }else{
+        layer = NERtcConstants.NERtcVideoStreamLayerCount.kNERtcVideoStreamLayerCountThree
       }
+      NERtcSDK.getInstance().setVideoStreamLayerCount(layer)
 
       //主流设置
       let configMain: NERtcConstants.NERtcVideoEncodeConfiguration = new NERtcConstants.NERtcVideoEncodeConfiguration
       configMain.maxProfile = videoModel.mainSendResolution
       configMain.degradationPreference = videoModel.mainEncodeFrameMode
+      configMain.colorFormat = videoModel.mainStreamColorFormat
       configMain.framerate = this.translateFrameRate(videoModel.mainEncodeFrameRate)
       configMain.cropMode = videoModel.mainCropMode
       configMain.mirrorMode = videoModel.mainMirrorMode
@@ -314,6 +342,7 @@ export default class ChatPresenter {
       let configThird: NERtcConstants.NERtcVideoEncodeConfiguration = new NERtcConstants.NERtcVideoEncodeConfiguration
       configThird.maxProfile = multiVideoModel.thirdSendResolution
       configThird.degradationPreference = multiVideoModel.thirdEncodeFrameMode
+      configThird.colorFormat = multiVideoModel.thirdStreamColorFormat
       configThird.framerate = this.translateFrameRate(multiVideoModel.thirdEncodeFrameRate)
       configThird.cropMode = multiVideoModel.thirdCropMode
       configThird.mirrorMode = multiVideoModel.thirdMirrorMode
@@ -325,6 +354,7 @@ export default class ChatPresenter {
       let configFourth: NERtcConstants.NERtcVideoEncodeConfiguration = new NERtcConstants.NERtcVideoEncodeConfiguration
       configFourth.maxProfile = multiVideoModel.fourthSendResolution
       configFourth.degradationPreference = multiVideoModel.fourthEncodeFrameMode
+      configFourth.colorFormat = multiVideoModel.fourthStreamColorFormat
       configFourth.framerate = this.translateFrameRate(multiVideoModel.fourthEncodeFrameRate)
       configFourth.cropMode = multiVideoModel.fourthCropMode
       configFourth.mirrorMode = multiVideoModel.fourthMirrorMode
@@ -369,6 +399,7 @@ export default class ChatPresenter {
       let configSub: NERtcConstants.NERtcVideoEncodeConfiguration = new NERtcConstants.NERtcVideoEncodeConfiguration
       configSub.maxProfile = videoModel.subSendResolution
       configSub.degradationPreference = videoModel.subEncodeFrameMode
+      configSub.colorFormat = videoModel.subStreamColorFormat
       configSub.framerate = this.translateFrameRate(videoModel.subEncodeFrameRate)
       configSub.cropMode = videoModel.subCropMode
       configSub.mirrorMode = videoModel.subMirrorMode
@@ -2042,7 +2073,6 @@ export default class ChatPresenter {
         return false
       }
 
-
       /**
        * @see Overmind-id: OMNRTCG2-57526
        */
@@ -2191,7 +2221,6 @@ export default class ChatPresenter {
       if(NERtcSDK.getInstance().enableLocalVideo(true, NERtcConstants.NERtcVideoStreamType.kNERtcVideoStreamTypeFourth) != NERtcConstants.ErrorCode.NO_ERROR) {
         return false
       }
-
 
       /**
        * @see Overmind-id: OMNRTCG2-57526
@@ -2369,6 +2398,48 @@ export default class ChatPresenter {
     } else {
       Prompt.showToast({ message: `视频数据回调已关闭，result:${result}` });
     }
+  }
+
+  enableFULiveBeauty(enable: boolean) {
+    if (this.fuRender == null) {
+      this.fuRender = new VideoFuRender()
+      this.fuRender.setBundlePath(getContext().filesDir + '/beauty')
+    }
+
+    if (enable) {
+      let handle = this.fuRender.getNativeHandle();
+      let result = NERtcSDK.getInstance().setExternalVideoProcessPlugin(handle);
+      console.info(TAG, `Set External video process plugin: ${result}`)
+      this.fuRender.enableBeauty(true)
+      this.rtcDemoLogicModel.GetModelState().beauty = true
+
+      //set restore value.
+      BeautyDataService.sharedInstance().skinViewModel.setAllSkinValues()
+      BeautyDataService.sharedInstance().shapeViewModel.setAllShapeValues()
+      BeautyDataService.sharedInstance().filterViewModel.setCurrentFilter()
+    } else {
+      NERtcSDK.getInstance().setExternalVideoProcessPlugin(0n);
+      this.fuRender.enableBeauty(false)
+      this.rtcDemoLogicModel.GetModelState().beauty = false
+    }
+  }
+
+  /**
+   * 设置美颜参数
+   * @param key
+   * @param value
+   */
+  setBeautyParams(key: string, value: number) {
+    this.fuRender?.setBeautyParam(key, value)
+  }
+
+  /**
+   * 设置美颜滤镜
+   * @param filterName
+   * @param filterLevel
+   */
+  setBeautyFilter(filterName: string, filterLevel: number) {
+    this.fuRender?.setFilterParam(filterName, filterLevel)
   }
 
   /**

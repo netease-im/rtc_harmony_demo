@@ -60,7 +60,7 @@ export default class ExternalH264Source {
   private width: number = 640
   private height: number = 480
 
-  private file?: fs.File
+  private file : fs.File|null = null
   private type: NERtcConstants.NERtcVideoStreamType
   // private timeoutId: number = -1
   private running: boolean = false
@@ -142,8 +142,11 @@ export default class ExternalH264Source {
       console.info(this.TAG, 'You have stop push encoded video frame.')
       return true
     }
-
     this.reset()
+    if (this.file) {
+      fs.closeSync(this.file)
+    }
+    this.file = null
     return true
   }
 

@@ -11,7 +11,7 @@ export class ExternalPcmSource {
   private type?: NERtcConstants.NERtcAudioStreamType
   private sampleRate: number
   private channels: number
-  private file?: fs.File;
+  private file : fs.File|null = null;
   private bufferLength?: number;
   private arrayBuffer?: ArrayBuffer
   private running: boolean = false
@@ -108,6 +108,10 @@ export class ExternalPcmSource {
     console.info(this.TAG, 'User stop push external audio frame.')
     this.running = false
     clearInterval(this.intervalTaskId)
+    if (this.file) {
+      fs.close(this.file)
+    }
+    this.file = null
     return true
   }
 

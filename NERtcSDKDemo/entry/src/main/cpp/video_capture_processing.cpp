@@ -43,10 +43,7 @@ napi_value VideoCaptureProcessing::GetVideoCaptureHandle(napi_env env, napi_call
   AV_INFO("GetVideoCaptureHandle addr: %{public}p", process);
   
   napi_value handle;
-  bool loss;
   assert(napi_create_bigint_uint64(env, (uint64_t)process, &handle) == napi_ok);
-  
-  if(loss) AV_ERROR("convert uint64 ptr loss!");
   return handle;
 }
 

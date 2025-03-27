@@ -3,6 +3,7 @@
 //
 // Node APIs are not fully supported. To solve the compilation error of the interface cannot be found,
 // please include "napi/native_api.h".
+#include "beauty/video_fu_render.h"
 #include "video_capture_processing.h"
 #include "video_render_processing.h"
 #include "napi/native_api.h"
@@ -10,6 +11,7 @@
 napi_value Init(napi_env env, napi_value exports) {
   VideoCaptureProcessing::Init(env, exports);
   VideoRenderProcessing::Init(env, exports);
+  VideoFuRender::Init(env, exports);
   return exports;
 }
 

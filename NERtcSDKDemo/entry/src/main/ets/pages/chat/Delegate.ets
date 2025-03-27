@@ -27,4 +27,5 @@ export default interface UIDelegate {
   //测速网络质量
   networkQuality?: (quality: number|null, result: NERtcConstants.NERtcProbeResult|null) => void;
   changeTitle?:(title: string) => void;
+  aiHowling?: (flag: number) => void;
 }

@@ -10,7 +10,7 @@ export default class ExternalOpusSource {
   private channels: number
   private running: boolean = false
   private intervalTaskId: number = -1
-  private file?: fs.File;
+  private file : fs.File|null = null
   private lenBuffer?: ArrayBuffer
   private duration: number = 20
   private offset: number = 0
@@ -118,6 +118,10 @@ export default class ExternalOpusSource {
     console.info(this.TAG, 'USER Stop push external encoded audio frame.')
     this.running = false
     this.reset()
+    if (this.file) {
+      fs.closeSync(this.file)
+    }
+    this.file = null
     return true
   }
 

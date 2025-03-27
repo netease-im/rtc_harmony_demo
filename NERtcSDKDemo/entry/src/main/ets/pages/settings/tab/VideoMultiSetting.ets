@@ -13,6 +13,7 @@ export struct VideoMultiSetting {
   public isInMeeting: boolean = false;
 
   private sendResolutionArray: string[] = ['Lowest', 'Low', 'Standard', '720P', '1080P']
+  private colorFormatArray: string[] = ['texture', 'I420']
   private encodeFrameMode: string[] = ['Default', 'MaintainFramerate', 'MaintainQuality', 'Balanced']
   private encodeFrameRate: string[] = ['7', '10', '15', '24', '30', 'Default']
   private cropModeArray: string[] = ['默认', '16:9', '4:3', '1:1']
@@ -35,21 +36,6 @@ export struct VideoMultiSetting {
     Column(){
       List({ space: 10 }) {
         ListItemGroup({ header: this.itemHead('第三流')}) {
-          ComposeListItem({
-            contentItem: {
-              primaryText: '开启小流',
-              secondaryText: '开启小流'
-            },
-            operateItem: {
-              switch: {
-                isCheck: this.videoModel.thirdEnableDualStream,
-                onChange: value => {
-                  this.videoModel.thirdEnableDualStream = value
-                  Prompt.showToast({ message: value ? '开启小流': '关闭小流'})
-                }
-              }
-            }
-          })
 
           NetEaseInputLogicDialog({
             title: '采集宽',
@@ -81,6 +67,15 @@ export struct VideoMultiSetting {
             index: this.videoModel.thirdSendResolution,
             choose: index => {
               this.videoModel.thirdSendResolution = index
+            }
+          })
+
+          NetEaseListLogicDialog({
+            array: this.colorFormatArray,
+            title: 'colorFormat',
+            index: this.videoModel.thirdStreamColorFormat,
+            choose: index => {
+              this.videoModel.thirdStreamColorFormat = index
             }
           })
 
@@ -128,28 +123,21 @@ export struct VideoMultiSetting {
 
         ListItemGroup({ header: this.itemHead('第四流') }) {
 
-          ComposeListItem({
-            contentItem: {
-              primaryText: '开启小流',
-              secondaryText: '开启小流'
-            },
-            operateItem: {
-              switch: {
-                isCheck: this.videoModel.fourthEnableDualStream,
-                onChange: value => {
-                  this.videoModel.fourthEnableDualStream = value
-                  Prompt.showToast({ message: value ? '开启小流': '关闭小流'})
-                }
-              }
-            }
-          })
-
           NetEaseListLogicDialog({
             array: this.sendResolutionArray,
             title: '发送分辨率',
             index: this.videoModel.fourthSendResolution,
             choose: index => {
               this.videoModel.fourthSendResolution = index
+            }
+          })
+
+          NetEaseListLogicDialog({
+            array: this.colorFormatArray,
+            title: 'colorFormat',
+            index: this.videoModel.fourthStreamColorFormat,
+            choose: index => {
+              this.videoModel.fourthStreamColorFormat = index
             }
           })
 

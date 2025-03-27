@@ -17,6 +17,7 @@ export struct OtherSetting {
   private mediaPriorityArray: string[] = ['HIGH', 'NORMAL']
   private cloudProxyArray: string[] = ['NONE_PROXY', 'UDP_PROXY']
   private mediaEncryptionOption: string[] = ['Disable(-1)', 'SM4ECB(0)', 'CustomEncryption']
+  private ipModeLevelOption: string[] = ['IPv4', 'IPv4与IPv6']
   public isInMeeting: boolean = false;
 
   private isHiddenInMeeting(): Visibility {
@@ -130,6 +131,15 @@ export struct OtherSetting {
               }
             }
           }).visibility(this.isHiddenInMeeting())
+
+          NetEaseListLogicDialog({
+            array: this.ipModeLevelOption,
+            title: 'IPv4/IPv6设置',
+            index: this.otherModel.ipVersionSetting,
+            choose: index => {
+              this.otherModel.ipVersionSetting = index
+            }
+          })
 
         }.divider({
           strokeWidth: 1,

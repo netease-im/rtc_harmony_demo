@@ -7,11 +7,15 @@
   "main": "",
   "version": "1.0.0",
   "dependencies": {
+
     //集成线下包，下载 SDK 产物之后放到 entry/libs 目录下。
     //包下载地址: https://doc.yunxin.163.com/nertc/resource?platform=harmonyos
     //"@nertc/nertc_sdk": "file:libs/nertc_sdk.har",
+
     //openharmony仓库集成
-    "@nertc/nertc_sdk": "5.6.50",
+    "@nertc/nertc_sdk": "5.8.5",
+
+    // Demo native module.
     "libdataprocessing.so": "file:./src/main/cpp/types/libdataprocessing"
   }
 }

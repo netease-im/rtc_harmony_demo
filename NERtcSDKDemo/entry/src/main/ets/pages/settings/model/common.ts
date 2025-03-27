@@ -11,6 +11,7 @@ export class AudioModel {
   autoOpenAudio: boolean = true
   autoSubAudio: boolean = true
   audioDumpType: number = 2
+  aiAudioHowling: boolean = false // ai 啸叫检测
 
   //伴音
   audioMixUrl: string = 'https://music.163.com/song/media/outer/url?id=65919.mp3' //URL
@@ -62,14 +63,15 @@ export class VideoModel {
   enableFrameObserver: boolean = false;
   autoEnableVideo: boolean = true //自动开启视频
   autoSubVideo: boolean = true //自定订阅视频
+  enableDualStream: number = 1
 
   //主流
   mainCaptureWidth: number = 0
   mainCaptureHeight: number = 0
   mainSendResolution: number = 3  //720p
+  mainStreamColorFormat: number = 1
   mainEncodeFrameMode: number = 0
   mainEncodeFrameRate: number = 4 //30fps
-  mainEnableDualStream: boolean = true
   mainCropMode: number = 0
   mainMirrorMode: number = 0
 
@@ -77,9 +79,9 @@ export class VideoModel {
   subCaptureWidth: number = 0
   subCaptureHeight: number = 0
   subSendResolution: number = 3  //720p
+  subStreamColorFormat: number = 1
   subEncodeFrameMode: number = 0
   subEncodeFrameRate: number = 4 //30fps
-  subEnableDualStream: boolean = true
   subCropMode: number = 0
   subMirrorMode: number = 0
 
@@ -123,19 +125,19 @@ export class VideoModelMulti {
   thirdCaptureWidth: number = 0
   thirdCaptureHeight: number = 0
   thirdSendResolution: number = 3  //720p
+  thirdStreamColorFormat: number = 1
   thirdEncodeFrameMode: number = 0
   thirdEncodeFrameRate: number = 4 //30fps
-  thirdEnableDualStream: boolean = true
   thirdCropMode: number = 0
   thirdMirrorMode: number = 0
 
-  //辅流
+  //第四流
   fourthCaptureWidth: number = 0
   fourthCaptureHeight: number = 0
   fourthSendResolution: number = 3  //720p
+  fourthStreamColorFormat: number = 1
   fourthEncodeFrameMode: number = 0
   fourthEncodeFrameRate: number = 4 //30fps
-  fourthEnableDualStream: boolean = true
   fourthCropMode: number = 0
   fourthMirrorMode: number = 0
 
@@ -175,6 +177,7 @@ export class OtherModel {
   cloudProxyOption: number = 0
   useExternalRender: boolean = false
   loginTimeOutTime: number = 0
+  ipVersionSetting: number = 1
 
   //推流
   pushAddress: string = ''

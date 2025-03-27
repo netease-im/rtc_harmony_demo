@@ -6,12 +6,12 @@
         "type": "HarmonyOS",
         "material": {
           "certpath": "/Users/yanghui/.ohos/config/default_NERtcSDKDemo_fC4X2KBaSsegelMsDG7dURDErenAy5xkkPJWnu7cV_U=.cer",
-          "storePassword": "0000001BF1FEF0E649C73314E123DF54450E94AC448869B692C71E96B07B214C6FD8C06938259AB9D19CB1",
           "keyAlias": "debugKey",
-          "keyPassword": "0000001B4C274D2184E923EFC04C0F0F1B6D50D39B3D0885DECD410B1BDAA2B35C7017A49A5A37127FA8CA",
+          "keyPassword": "0000001AAE3BCD1D940D5490D8D2643A20DBAB9C66AC65E73B8719A29B4E0E025362558CF00D9E6AAAA1",
           "profile": "/Users/yanghui/.ohos/config/default_NERtcSDKDemo_fC4X2KBaSsegelMsDG7dURDErenAy5xkkPJWnu7cV_U=.p7b",
           "signAlg": "SHA256withECDSA",
-          "storeFile": "/Users/yanghui/.ohos/config/default_NERtcSDKDemo_fC4X2KBaSsegelMsDG7dURDErenAy5xkkPJWnu7cV_U=.p12"
+          "storeFile": "/Users/yanghui/.ohos/config/default_NERtcSDKDemo_fC4X2KBaSsegelMsDG7dURDErenAy5xkkPJWnu7cV_U=.p12",
+          "storePassword": "0000001A8821D54B88207FFEF88E453C8881E6B4B9F340A85B24EE60804B225340E0651E38DE783401A2"
         }
       }
     ],

@@ -8,7 +8,10 @@ import { MoreFunction } from './chat/dialog/MoreFunction';
 import { RTCDemoView } from './chat/dialog/RTCDemoView';
 import * as model from '../pages/chat/ChatModel'
 import LiveStreamingKit from './LiveStreamingKit';
-
+import {KComponentView} from "./textureTest/KComponentView"
+import DisplayCalculator from './textureTest/DisplayCalculator';
+import { Constants } from './textureTest/Constants';
+import display from '@ohos.display';
 @Entry
 @Component
 struct Chat {
@@ -37,6 +40,11 @@ struct Chat {
           this.uiType = UI.OTHER
           this.showMoreFunction = true
         })
+      MenuItem({ content: '美颜', startIcon:$r('app.media.beauty')})
+        .onClick(() => {
+          this.uiType = UI.BEAUTY
+          this.showMoreFunction = true
+        })
     }
   }
 
@@ -53,7 +61,12 @@ struct Chat {
   @State roomNetworkQuality: Map<bigint, string>|null = null
   @State remoteVideoStats: Map<bigint, Map<number, string>>|null = null
   @State remoteAudioStats: Map<bigint, string>|null = null
-
+  @State aiHowlingFlag: number = 0
+  @State xComponentWidth: number = 384;
+  @State xComponentHeight: number = 450;
+  @StorageLink('defaultAspectRatio') @Watch('initXComponentSize') defaultAspectRatio: number = Constants.MIN_ASPECT_RATIO;
+  private screenHeight: number = 0;
+  private screenWidth: number = 0;
   private getRemoteVolumeIndication(item: DemoUser): RemoteVolumeInfo|null {
     if(!this.remoteVolumeInfos)
       return null
@@ -98,7 +111,9 @@ struct Chat {
           } break;
         case OPERATOR.DEL: {
             if(index >= 0) {
-              this.users = this.users.filter(user => (user.uid !== obj['uid'] || user.multiStream !== obj['multiStream']))
+              this.users = this.users.filter(user => {
+                return user.uid !== obj['uid']
+              })
             }
           } break;
         case OPERATOR.UPD: {
@@ -156,6 +171,10 @@ struct Chat {
 
     remoteAudioStats: (stats: Map<bigint, string>): void => {
       this.remoteAudioStats = stats
+    },
+
+    aiHowling: (flag: number): void => {
+      this.aiHowlingFlag = flag
     }
   }
 
@@ -170,6 +189,17 @@ struct Chat {
     //Ensure local rtcVideoView load success.
     let local: DemoUser = new DemoUser(BigInt(login?.uid), true)
     this.users[0] = local
+
+    let mDisplay = display.getDefaultDisplaySync();
+    this.screenWidth = px2vp(mDisplay.width);
+    this.screenHeight = px2vp(mDisplay.height);
+    this.initXComponentSize();
+  }
+
+  initXComponentSize(): void {
+    let defaultSize = DisplayCalculator.calcSurfaceDisplaySize(this.screenWidth, this.screenHeight, this.defaultAspectRatio);
+    this.xComponentWidth = defaultSize.width;
+    this.xComponentHeight = defaultSize.height;
   }
 
   onBackPress(): boolean | void {
@@ -322,6 +352,12 @@ struct Chat {
 
                       if (item.local && this.roomNetworkQuality) {
                         Text(this.roomNetworkQuality.get(item.uid)).width('100%').fontSize(10).fontColor(Color.Yellow)
+                          .textAlign(TextAlign.Start)
+                          .margin(2)
+                      }
+
+                      if (item.local) {
+                        Text(`啸叫检测: ${this.aiHowlingFlag}`).width('100%').fontSize(10).fontColor(Color.Red)
                           .textAlign(TextAlign.Start)
                           .margin(2)
                       }

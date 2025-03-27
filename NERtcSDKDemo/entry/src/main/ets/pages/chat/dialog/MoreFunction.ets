@@ -1,6 +1,5 @@
 import ChatPresenter from '../Presenter1'
 import { Prompt } from '@kit.ArkUI'
-import { CallDetailDialog } from './CallDetailDialog';
 import { SubDetailDialog } from './SubDetailDialog';
 import { UI } from '../ChatModel';
 import { WhiteBlackListDialog } from './WhiteBlackListDialog';
@@ -9,9 +8,19 @@ import { EditTextBaseDialog } from './EditTextBaseDialog';
 import { MediaRelayDialog } from './MediaRelayDialog';
 import { StartPKDialog } from './StartPKDialog';
 import {StartSeatDialog} from './StartSeatDialog';
-import LiveStreamingKit from '../../LiveStreamingKit';
+import { BeautyFilterView } from '../../beauty/BeautyFilterView';
+import { BeautyShapeView } from '../../beauty/BeautyShapeView';
+import { BeautySkinView } from '../../beauty/BeautySkinView';
+import { SELECTCOLOR } from '../../beauty/BeautyConstants';
+import { BeautyDataService } from '../../beauty/services/BeautyDataService';
 
 export let gOtherModel: OtherModel
+
+export enum FUBeautyType {
+  Skin,
+  Shape,
+  Filter
+}
 
 @Component
 export struct MoreFunction {
@@ -68,6 +77,10 @@ export struct MoreFunction {
   @State qosCallbackEnable: boolean = false //qos callback 回调
   @State preDecodeCallbackEnable: boolean = false //predecode callback 回调
   turnToSetting?: () => void;
+
+  // 美颜
+  @State beautyEnable: boolean = false
+  @State beautyType: FUBeautyType = FUBeautyType.Skin;
 
   private fillStringToBigUint64Array(whiteBlackList: string|null): BigUint64Array|null {
     let array: BigUint64Array|null = null
@@ -226,6 +239,51 @@ export struct MoreFunction {
     height: '40%',
     cornerRadius: 10
   })
+
+  @Builder
+  bottomBeautyStyleComponents() {
+    Row() {
+      Text('美肤')
+        .fontSize(16)
+        .width('33%')
+        .textAlign(TextAlign.Center)
+        .fontColor(this.beautyType === FUBeautyType.Skin ? SELECTCOLOR : Color.White)
+        .onClick(() => {
+          this.beautyType = FUBeautyType.Skin;
+        })
+      Text('美型')
+        .fontSize(16)
+        .width('33%')
+        .textAlign(TextAlign.Center)
+        .fontColor(this.beautyType === FUBeautyType.Shape ? SELECTCOLOR : Color.White)
+        .onClick(() => {
+          this.beautyType = FUBeautyType.Shape;
+        })
+      Text('滤镜')
+        .fontSize(16)
+        .width('33%')
+        .textAlign(TextAlign.Center)
+        .fontColor(this.beautyType === FUBeautyType.Filter ? SELECTCOLOR : Color.White)
+        .onClick(() => {
+          this.beautyType = FUBeautyType.Filter;
+        })
+    }
+    .backgroundColor(Color.Black)
+    .width('100%')
+    .height('20%')
+  }
+
+  aboutToAppear(): void {
+    let beautyEnable = ChatPresenter.getInstance().GetLogicDataModel().GetModelState().beauty
+    console.info(this.TAG, `Current beauty state: ${beautyEnable}`)
+    this.beautyEnable = beautyEnable;
+  }
+
+  aboutToDisappear(): void {
+    BeautyDataService.sharedInstance().skinViewModel.saveSkinDataPersistently()
+    BeautyDataService.sharedInstance().shapeViewModel.saveShapeDataPersistently()
+    BeautyDataService.sharedInstance().filterViewModel.saveFilterDataPersistently()
+  }
 
   build() {
     Grid(){
@@ -551,6 +609,13 @@ export struct MoreFunction {
             ChatPresenter.getInstance().sendSEI()
           }).width('100%').height(50).fontSize(15).borderRadius(10)
         }
+
+        GridItem() {
+          Button(!this.beautyEnable ?  '打开美颜' : '关闭美颜', { type: ButtonType.Normal, stateEffect: true }).onClick(() => {
+            ChatPresenter.getInstance().enableFULiveBeauty(!this.beautyEnable)
+            this.beautyEnable = !this.beautyEnable
+          }).width('100%').height(50).fontSize(15).borderRadius(10)
+        }
       }
 
       if(this.uiType == UI.OTHER) {
@@ -647,8 +712,31 @@ export struct MoreFunction {
             }
           }).width('100%').height(50).fontSize(15).borderRadius(10)
         }
-
       }
-    }.width('100%').height(250).columnsTemplate('1fr 1fr 1fr').backgroundColor(Color.Grey).columnsGap(5).rowsGap(5).padding(5)
+
+      if (this.uiType == UI.BEAUTY) {
+        GridItem() {
+          Column() {
+              Stack() {
+                BeautyFilterView()
+                  .visibility(this.beautyType == FUBeautyType.Filter ? Visibility.Visible : Visibility.Hidden)
+                  .width('100%')
+                  .height('80%')
+
+                BeautyShapeView()
+                  .visibility(this.beautyType == FUBeautyType.Shape ? Visibility.Visible : Visibility.Hidden)
+                  .width('100%')
+                  .height('80%')
+
+                BeautySkinView()
+                  .visibility(this.beautyType == FUBeautyType.Skin ? Visibility.Visible : Visibility.Hidden)
+                  .width('100%')
+                  .height('80%')
+              }
+            this.bottomBeautyStyleComponents()
+          }
+        }
+      }
+    }.width('100%').height(250).columnsTemplate(this.uiType == UI.BEAUTY ? '1fr' : '1fr 1fr 1fr').backgroundColor(Color.Grey).columnsGap(5).rowsGap(5).padding(this.uiType == UI.BEAUTY ? 0 : 5)
   }
 }

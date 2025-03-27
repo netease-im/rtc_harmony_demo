@@ -13,7 +13,7 @@ export class ExternalYuvVideoSource {
   private rotation: NERtcConstants.NERtcVideoFrameRotation
   private width: number
   private height: number
-  private file?: fs.File;
+  private file : fs.File|null = null
   private bufferLength?: number;
   private arrayBuffer?: ArrayBuffer
   private running: boolean = false
@@ -113,6 +113,10 @@ export class ExternalYuvVideoSource {
     console.info(this.TAG, 'User stop push external video frame.')
     this.running = false
     clearInterval(this.intervalTaskId)
+    if (this.file) {
+      fs.closeSync(this.file)
+    }
+    this.file = null
     return true
   }
 

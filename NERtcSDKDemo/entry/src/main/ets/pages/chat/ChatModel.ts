@@ -107,7 +107,8 @@ export enum UI {
   AUDIO = 0,
   VIDEO = 1,
   VIDEO_MULTI = 3,
-  OTHER = 2
+  OTHER = 2,
+  BEAUTY=4
 }
 
 export interface LocalVolumeInfo {

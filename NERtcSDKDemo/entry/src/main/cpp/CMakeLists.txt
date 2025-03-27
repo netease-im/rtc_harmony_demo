@@ -5,14 +5,24 @@ project(dataProcessing)
 #include_directories(${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/../../../oh_modules/@nertc/nertc_sdk/oh_modules/wrapper/include)
 #set(NERTC_LIB_PATH ${CMAKE_CURRENT_SOURCE_DIR}/../../../oh_modules/@nertc/nertc_sdk/oh_modules/wrapper/libs)
 
-include_directories(${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/../../../../oh_modules/.ohpm/@nertc+nertc_sdk@5.6.50/oh_modules/wrapper/include)
-set(NERTC_LIB_PATH ${CMAKE_CURRENT_SOURCE_DIR}/../../../../oh_modules/.ohpm/@nertc+nertc_sdk@5.6.50/oh_modules/wrapper/libs)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/../../../../oh_modules/.ohpm/@nertc+nertc_sdk@5.8.5/oh_modules/wrapper/include)
+set(NERTC_LIB_PATH ${CMAKE_CURRENT_SOURCE_DIR}/../../../../oh_modules/.ohpm/@nertc+nertc_sdk@5.8.5/oh_modules/wrapper/libs)
 
 add_library(nertc_sdk SHARED IMPORTED)
 set_target_properties(nertc_sdk PROPERTIES IMPORTED_LOCATION ${NERTC_LIB_PATH}/${CMAKE_OHOS_ARCH_ABI}/libnertc_sdk.so)
 
+add_library(FUAI SHARED IMPORTED)
+set_target_properties(FUAI PROPERTIES IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/beauty/lib/${CMAKE_OHOS_ARCH_ABI}/libfuai.so)
+
+add_library(CNameSDK SHARED IMPORTED)
+set_target_properties(CNameSDK PROPERTIES IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/beauty/lib/${CMAKE_OHOS_ARCH_ABI}/libCNamaSDK.so)
+
 file(GLOB RENDERS "${CMAKE_SOURCE_DIR}/render/*.cpp")
+file(GLOB BEAUTY "${CMAKE_SOURCE_DIR}/beauty/*.cpp")
 
-add_library(dataprocessing SHARED napi_init.cpp video_capture_processing.cpp video_render_processing.cpp ${RENDERS})
+set(ALL_SOURCES ${RENDERS})
+list(APPEND ALL_SOURCES ${BEAUTY})
 
-target_link_libraries(dataprocessing PUBLIC nertc_sdk libace_ndk.z.so libace_napi.z.so libhilog_ndk.z.so EGL GLESv3)
+add_library(dataprocessing SHARED napi_init.cpp video_capture_processing.cpp video_render_processing.cpp ${ALL_SOURCES})
+
+target_link_libraries(dataprocessing PUBLIC nertc_sdk FUAI CNameSDK libace_ndk.z.so libace_napi.z.so libhilog_ndk.z.so EGL GLESv3)

@@ -28,6 +28,7 @@ export default class RtcDefaultCallbackEx extends NERtcCallbackEx {
   }
 
   onJoinChannel(result: number, channelId: bigint, elapsed: bigint, uid: bigint): void {
+    console.info(this.TAG, 'onJoinChannel: ' + result);
     const roomState = result == NERtcConstants.ErrorCode.NO_ERROR ? ChatState.CHAT_ED : ChatState.CHAT_IDLE;
     this.logicModel?.UpdateRtcRoomState(roomState)
     if(result == NERtcConstants.ErrorCode.NO_ERROR && this.logicModel?.GetLastSwitchChannelName()) {
@@ -181,6 +182,10 @@ export default class RtcDefaultCallbackEx extends NERtcCallbackEx {
     });
   }
   onAsrCaptionResult(asrResults: NERtcConstants.NERtcAsrCaptionResult[]): void {
+    if (!asrResults) {
+      console.info(this.TAG, 'asrResult is undefined.')
+      return
+    }
     let message = ""
     for(let i = 0;i < asrResults.length;i++){
       message += "uid:" + asrResults[i].uid +" isLocalUser:" + asrResults[i].isLocalUser + " language:" + asrResults[i].language + " tLanguage:" + asrResults[i].translationLanguage + " content:" + asrResults[i].content + " translatedText:" + asrResults[i].translatedText
@@ -245,6 +250,12 @@ export default class RtcDefaultCallbackEx extends NERtcCallbackEx {
   }
 
   onLabFeatureCallback(key: string, param: string): void {
+  }
+
+  onAiData(type: string, data: string): void {
+    Prompt.showToast({
+      message: `onAiData, type:${type}, data:${data}`
+    });
   }
 
   onPushStreamingReconnectedSuccess(): void {
@@ -388,4 +399,8 @@ export default class RtcDefaultCallbackEx extends NERtcCallbackEx {
     Prompt.showToast({ message: `uid:${userId} first video frame render, width:${width}, height:${height}`})
   }
 
+  onScreenCaptureStatusChanged(status: NERtcConstants.NERtcScreenCaptureStatus): void {
+    console.info(this.TAG, `onScreenCaptureStatusChanged status: ${status}`)
+    Prompt.showToast({ message: 'onScreenCaptureStatusChanged status:' + status })
+  }
 }

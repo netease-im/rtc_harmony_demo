@@ -113,6 +113,22 @@ export struct AudioSetting {
               this.audioModel.audioDumpType = index
             }
           })
+
+          ComposeListItem({
+            contentItem: {
+              primaryText: '打开AI啸叫检测',
+              secondaryText: '打开AI啸叫检测'
+            },
+            operateItem: {
+              switch: {
+                isCheck: this.audioModel.aiAudioHowling,
+                onChange: value => {
+                  this.audioModel.aiAudioHowling = value
+                  Prompt.showToast({ message: `是否打开AI啸叫检测:${value}`})
+                }
+              }
+            }
+          })
         }
         .divider({
           strokeWidth: 1,
