@@ -1,15 +1,35 @@
 cmake_minimum_required(VERSION 3.4.1)
 project(dataProcessing)
 
-# so 和 .h 在模块层级的 oh_modules 和 项目级别的 oh_modules 下找找，不同版本 ide 生成的路径可能不一样 。
-#include_directories(${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/../../../oh_modules/@nertc/nertc_sdk/oh_modules/wrapper/include)
-#set(NERTC_LIB_PATH ${CMAKE_CURRENT_SOURCE_DIR}/../../../oh_modules/@nertc/nertc_sdk/oh_modules/wrapper/libs)
+set(FIND_WRAPPER ${CMAKE_CURRENT_SOURCE_DIR}/../../../find_dir.sh)
 
-include_directories(${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/../../../../oh_modules/.ohpm/@nertc+nertc_sdk@5.8.5/oh_modules/wrapper/include)
+execute_process(
+    COMMAND chmod +x ${FIND_WRAPPER}
+    RESULT_VARIABLE CHMOD_RESULT
+    ERROR_VARIABLE CHMOD_ERROR
+)
+
+execute_process(
+    COMMAND ${SHELL} ${FIND_WRAPPER}
+    RESULT_VARIABLE result
+    OUTPUT_VARIABLE output
+    ERROR_VARIABLE error
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+
+if(NOT result EQUAL 0)
+    message(FATAL_ERROR "Command failed: ${error}")
+else()
+    message(WARNING "Command output: ${output}")
+endif()
+
+set(WRAPPER_PATH ${output})
+
+include_directories(${CMAKE_CURRENT_SOURCE_DIR} ${WRAPPER_PATH}/include)
 set(NERTC_LIB_PATH ${CMAKE_CURRENT_SOURCE_DIR}/../../../../oh_modules/.ohpm/@nertc+nertc_sdk@5.8.5/oh_modules/wrapper/libs)
 
 add_library(nertc_sdk SHARED IMPORTED)
-set_target_properties(nertc_sdk PROPERTIES IMPORTED_LOCATION ${NERTC_LIB_PATH}/${CMAKE_OHOS_ARCH_ABI}/libnertc_sdk.so)
+set_target_properties(nertc_sdk PROPERTIES IMPORTED_LOCATION ${WRAPPER_PATH}/libs/${CMAKE_OHOS_ARCH_ABI}/libnertc_sdk.so)
 
 add_library(FUAI SHARED IMPORTED)
 set_target_properties(FUAI PROPERTIES IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/beauty/lib/${CMAKE_OHOS_ARCH_ABI}/libfuai.so)

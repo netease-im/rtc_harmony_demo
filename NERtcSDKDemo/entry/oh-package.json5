@@ -13,7 +13,7 @@
     //"@nertc/nertc_sdk": "file:libs/nertc_sdk.har",
 
     //openharmony仓库集成
-    "@nertc/nertc_sdk": "5.8.5",
+    "@nertc/nertc_sdk": "5.8.10",
 
     // Demo native module.
     "libdataprocessing.so": "file:./src/main/cpp/types/libdataprocessing"

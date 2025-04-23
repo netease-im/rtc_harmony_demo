@@ -26,8 +26,9 @@
 
 ![WX20240222-101914.png](./image/WX20240222-101914.png)
 
-![WX20240222-102042.png](./image/WX20240222-102042.png)
+![WX20250423-134012.png](./image/WX20250423-134012.png)
 
+> 如果调用 `joinChannel` 加入频道填入的 token 是服务端提供的，`Demo` 首页勾选非安全模式入会。否则需要客户端获取 `token`。
 
 #### 步骤3: 编译运行
 
@@ -73,7 +74,7 @@
 ```json5
   "dependencies": {
     //openharmony仓库集成
-    "@nertc/nertc_sdk": "1.5.0-beta"
+    "@nertc/nertc_sdk": "5.8.10"
   }
 ```
 
