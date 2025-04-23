@@ -161,7 +161,7 @@ export class VideoModelMulti {
 export class OtherModel {
 
   //通用
-  debug: boolean = true
+  debug: boolean = false
   appKey: string = ''
   captionMode: boolean = false
   captionSource: string = 'CH'
